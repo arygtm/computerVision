@@ -4,7 +4,8 @@
 import cv2
 import time
 import numpy as np
-import imutils
+#from imutils import non_max_suppression
+from nms import *
 
 # Pretrained classes in the model
 classNames = {0: 'background',
@@ -37,83 +38,80 @@ def id_class_name(class_id, classes):
 # Loading model
 
 #Works well 16fps
-#model = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb',
-#                                     'models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
+model0 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
 
 #Works well 14fps
-model1 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSD-v2/frozen_inference_graph.pb',
-                                     'models/MobileNet-SSD-v2/ssd_mobilenet_v2_coco_2018_03_29.pbtxt')
+model1 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSD-v2/frozen_inference_graph.pb','models/MobileNet-SSD-v2/ssd_mobilenet_v2_coco_2018_03_29.pbtxt')
 
 #Works ok 10fps
-model2 = cv2.dnn.readNetFromTensorflow('models/Inception-SSD-v2/frozen_inference_graph.pb',
-                                      'models/Inception-SSD-v2/ssd_inception_v2_coco_2017_11_17.pbtxt')
+#model2 = cv2.dnn.readNetFromTensorflow('models/Inception-SSD-v2/frozen_inference_graph.pb','models/Inception-SSD-v2/ssd_inception_v2_coco_2017_11_17.pbtxt')
 
 #Loads. 2.5fps. No detections
-model3 = cv2.dnn.readNetFromTensorflow('models/faster_rcnn_inception_v2_coco/frozen_inference_graph.pb',
-                                      'models/faster_rcnn_inception_v2_coco/faster_rcnn_inception_v2_coco_2018_01_28.pbtxt')
+#model3 = cv2.dnn.readNetFromTensorflow('models/faster_rcnn_inception_v2_coco/frozen_inference_graph.pb','models/faster_rcnn_inception_v2_coco/faster_rcnn_inception_v2_coco_2018_01_28.pbtxt')
 
 #Works ok. 0.8fps.
-model4 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSD-v1-FPN/frozen_inference_graph.pb',
-                                      'models/MobileNet-SSD-v1-FPN/ssd_mobilenet_v1_fpn_coco.pbtxt')
+#model4 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSD-v1-FPN/frozen_inference_graph.pb','models/MobileNet-SSD-v1-FPN/ssd_mobilenet_v1_fpn_coco.pbtxt')
+
 #Loads. 0.5fps. No detections.
-model5 = cv2.dnn.readNetFromTensorflow('models/Faster-RCNN-ResNet-50/frozen_inference_graph.pb',
-                                      'models/Faster-RCNN-ResNet-50/faster_rcnn_resnet50_coco_2018_01_28.pbtxt')
+#model5 = cv2.dnn.readNetFromTensorflow('models/Faster-RCNN-ResNet-50/frozen_inference_graph.pb','models/Faster-RCNN-ResNet-50/faster_rcnn_resnet50_coco_2018_01_28.pbtxt')
 
 #Loads. 0.18fps. few detections.
-model6 = cv2.dnn.readNetFromTensorflow('models/faster_rcnn_resnet101_kitti/frozen_inference_graph.pb',
-                                      'models/faster_rcnn_resnet101_kitti/faster_rcnn_resnet101_kitti.pbtxt')
+#model6 = cv2.dnn.readNetFromTensorflow('models/faster_rcnn_resnet101_kitti/frozen_inference_graph.pb','models/faster_rcnn_resnet101_kitti/faster_rcnn_resnet101_kitti.pbtxt')
 
+movieDir = '/Users/arygout/Documents/aaStuff/computerVision/BenchmarkVideos/'
 
+kDetectionThreshold = 0.43
 
+def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
+    cap = cv2.VideoCapture(movieIn)
+    out = cv2.VideoWriter(movieOut,cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1280,720))
 
-cap = cv2.VideoCapture('/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov')
-out = cv2.VideoWriter('AryaWalkingLabeledNewNet.avi',cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1280,720))
-#Labeling and writing to a video to compare multiple
+    frameCounter = -1
 
+    while(True):
+        frameCounter += 1
+        r, image = cap.read()
+        if frameCounter % frameSkip != 0:
+            continue
+        if r:
+            start_time = time.time()
+            image_height, image_width, _ = image.shape
 
-frameCounter = -1
+            model.setInput(cv2.dnn.blobFromImage(image, size=(640, 640), swapRB=True))
 
-kDetectionThreshold = 0.25
+            output = model.forward()
+            #print(output[0,0,:,:])
 
-while(True):
-    frameCounter += 1
-    r, image = cap.read()
-    if frameCounter % 10 != 0:
-        continue
-    if r:
-        start_time = time.time()
-        image_height, image_width, _ = image.shape
+            end_time = time.time()#Checks the time to label a single frame. Allows for easy comparison of networks.
+            print("Elapsed Time:",end_time-start_time)
 
-        model.setInput(cv2.dnn.blobFromImage(image, size=(640, 640), swapRB=True))
-        output = model.forward()
-        # print(output[0,0,:,:].shape)
+            #boxes = non_max_suppression(output[0, 0, :, :])
 
-        end_time = time.time()#Checks the time to label a single frame. Allows for easy comparison of networks.
-        print("Elapsed Time:",end_time-start_time)
+            for detection in output[0, 0, :, :]:
+                confidence = detection[2]
+                class_id = detection[1]
+                if confidence > detectionThreshold and class_id == 1:
 
-        for detection in output[0, 0, :, :]:
-            confidence = detection[2]
-            class_id = detection[1]
-            if confidence > kDetectionThreshold and class_id == 1:
+                    class_name=id_class_name(class_id,classNames)
+                    print(str(str(class_id) + " " + str(detection[2])  + " " + class_name))
+                    box_x = detection[3] * image_width
+                    box_y = detection[4] * image_height
+                    box_width = detection[5] * image_width
+                    box_height = detection[6] * image_height
+                    cv2.rectangle(image, (int(box_x), int(box_y)), (int(box_width), int(box_height)), (23, 230, 210), thickness=1)
+                    cv2.putText(image, str(detection[2]) ,(int(box_x), int(box_y)),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
+            out.write(image)
+            cv2.imshow('image', image)
+        else:
+            break
+        k = cv2.waitKey(1)
 
-                class_name=id_class_name(class_id,classNames)
-                print(str(str(class_id) + " " + str(detection[2])  + " " + class_name))
-                box_x = detection[3] * image_width
-                box_y = detection[4] * image_height
-                box_width = detection[5] * image_width
-                box_height = detection[6] * image_height
-                cv2.rectangle(image, (int(box_x), int(box_y)), (int(box_width), int(box_height)), (23, 230, 210), thickness=1)
-                #cv2.putText(image,class_name ,(int(box_x), int(box_y+.05*image_height)),cv2.FONT_HERSHEY_SIMPLEX,(.005*image_width),(0, 0, 255))
-        out.write(image)
-        cv2.imshow('image', image)
-    else:
-        break
-    k = cv2.waitKey(1)
+        if k == 0xFF & ord("q"):
+            break
+        # cv2.imwrite("image_box_text.jpg",image)
 
-    if k == 0xFF & ord("q"):
-        break
-    # cv2.imwrite("image_box_text.jpg",image)
-
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+labelVideo(model0,kDetectionThreshold,10,movieDir+'AryaRunningBenchmark.mov',movieDir+'Labeled/MobileNet-SSD-v2/AryaBenchmark65-3ftLabeled.avi')
+#abelVideo(model1,kDetectionThreshold,10,'/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov',movieDir+'Labeled/AryaWalkingLabeled.avi')
