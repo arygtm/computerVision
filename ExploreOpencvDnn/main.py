@@ -5,7 +5,10 @@ import cv2
 import time
 import numpy as np
 #from imutils import non_max_suppression
+from intersection import *
 from nms import *
+import pdb
+import os
 
 # Pretrained classes in the model
 classNames = {0: 'background',
@@ -69,6 +72,8 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
     frameCounter = -1
 
+    trackedBoxes = np.empty((0,4))
+
     while(True):
         frameCounter += 1
         r, image = cap.read()
@@ -78,7 +83,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
             start_time = time.time()
             image_height, image_width, _ = image.shape
 
-            model.setInput(cv2.dnn.blobFromImage(image, size=(640, 640), swapRB=True))
+            model.setInput(cv2.dnn.blobFromImage(image, size=(640, 320), swapRB=True))
 
             output = model.forward()
             #print(output[0,0,:,:])
@@ -87,7 +92,8 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
             print("Elapsed Time:",end_time-start_time)
 
             #boxes = non_max_suppression(output[0, 0, :, :])
-
+            #print(output[0, 0, :, :].shape)
+            allCurBoxes = np.empty((0,5))
             for detection in output[0, 0, :, :]:
                 confidence = detection[2]
                 class_id = detection[1]
@@ -99,8 +105,44 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     box_y = detection[4] * image_height
                     box_width = detection[5] * image_width
                     box_height = detection[6] * image_height
-                    cv2.rectangle(image, (int(box_x), int(box_y)), (int(box_width), int(box_height)), (23, 230, 210), thickness=1)
-                    cv2.putText(image, str(detection[2]) ,(int(box_x), int(box_y)),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
+                    #cv2.rectangle(image, (int(box_x), int(box_y)), (int(box_width), int(box_height)), (23, 230, 210), thickness=1)
+                    #cv2.putText(image, str(detection[2]) ,(int(box_x), int(box_y)),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
+                    allCurBoxes = np.vstack((allCurBoxes, [int(box_x), int(box_y), int(box_width), int(box_height), confidence]))
+
+            nmsOut = np.array(non_max_suppression(allCurBoxes[:,0:4],allCurBoxes[:,4]))
+            matches = matchBoxes(trackedBoxes,nmsOut[:,0:4])
+            if trackedBoxes.shape[0] != 0:
+                for i in range(curBoxes.shape[0]):
+                    row = curBoxes[i]
+                    cv2.rectangle(image, (int(row[0]), int(row[1])), (int(row[2]), int(row[3])), (0, 0, 255), thickness=1)
+            curBoxes = np.empty((0,4))
+            if nmsOut.shape[0] != 0:
+                curBoxes = nmsOut[:,0:4]
+                probs = nmsOut[:,4]
+                for i in range(curBoxes.shape[0]):
+                    row = curBoxes[i]
+                    cv2.rectangle(image, (int(row[0]), int(row[1])), (int(row[2]), int(row[3])), (23, 230, 210), thickness=1)
+                    #db.set_trace()
+                    cv2.putText(image, str(probs[i]) , (int(row[0]),int(row[1])),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
+            #if trackedBoxes.shape[0] != 0 and nmsOut.shape[0] != 0:
+
+            trackedBoxes = curBoxes
+            """if(range(curBoxes.shape[0] >= 2)):
+                for i in range(curBoxes.shape[0]):
+                    for j in range(curBoxes.shape[0]):
+                        if(j != i):
+                            iBox = intersection(curBoxes[i], curBoxes[j])
+                            #cv2.rectangle(image, (int(iBox[0]), int(iBox[1])), ((int(iBox[2]-iBox[0])), int(iBox[3]-iBox[1])), (23, 230, 0), thickness=1)
+                            if not np.all(iBox == None):
+                                cv2.rectangle(image, (int(iBox[0]), int(iBox[1])), ((int(iBox[2])), int(iBox[3])), (255, 0, 0), thickness=1)
+                            else:
+                                print("detections do not overlap")
+                            #cv2.rectangle(image, (int(iBox[0]), int(iBox[1])), ((int(iBox[2]-iBox[0])), int(iBox[3]-iBox[1])), (23, 230, 0), thickness=1)
+                            #print(iBox)
+
+                            #cv2.circle(image, (int(iBox[0][0]+iBox[1][0]),int(iBox[0][1]+iBox[1][1])) ,20,(0, 255, 0),thickness = 5)
+                            #cv2.circle(image, (int(iBox[0][0]), int(iBox[0][1])) ,20,(0, 255, 0),thickness = 5)
+                            #cv2.circle(image, (int(iBox[1][0]), int(iBox[1][1])) ,20,(0, 255, 0),thickness = 5)"""
             out.write(image)
             cv2.imshow('image', image)
         else:
@@ -110,8 +152,17 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
         if k == 0xFF & ord("q"):
             break
         # cv2.imwrite("image_box_text.jpg",image)
-
+        #pdb.set_trace()
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-labelVideo(model0,kDetectionThreshold,10,movieDir+'AryaRunningBenchmark.mov',movieDir+'Labeled/MobileNet-SSD-v2/AryaBenchmark65-3ftLabeled.avi')
-#abelVideo(model1,kDetectionThreshold,10,'/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov',movieDir+'Labeled/AryaWalkingLabeled.avi')
+
+for file in os.listdir(movieDir):
+    if(file[-3:] == "mov"):
+        print(file[0:-4])
+        video = os.path.join(movieDir,file)
+        labelVideo(model0,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSDLite-v2/' + file[0:-4] + 'Labeled.avi')
+        #labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')
+
+#pdb.set_trace()
+#labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
+#labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
