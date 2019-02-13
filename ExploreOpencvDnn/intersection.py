@@ -1,13 +1,13 @@
 import numpy as np
 import pdb
-import scipy
+import scipy.optimize
 
 def overlap1D(a1,a2,b1,b2):
     return (a1 <= b1 and a2 >= b1) or (a1 >= b1 and a1 <= b2)
 
 def overlap2D(boxA,boxB):
-    return overlap1D(boxA[0], boxA[0] + boxA[2], boxB[0], boxB[0] + boxB[2]) and \
-        overlap1D(boxA[1], boxA[1] + boxA[3], boxB[1], boxB[1] + boxB[3])
+    #return overlap1D(boxA[0], boxA[0] + boxA[2], boxB[0], boxB[0] + boxB[2]) and overlap1D(boxA[1], boxA[1] + boxA[3], boxB[1], boxB[1] + boxB[3])
+    return overlap1D(boxA[0], boxA[2], boxB[0], boxB[2]) and overlap1D(boxA[1], boxA[3], boxB[1], boxB[3])
 
 """def intersection(boxA, boxB):
   if not overlap2D(boxA, boxB):
@@ -33,6 +33,8 @@ def intersection(boxA, boxB):
 
 def intersectionOverUnion(boxA,boxB):
     boxI = intersection(boxA,boxB)
+    if np.all(boxI) == None:
+        return 0
     boxes = np.vstack((boxA,boxB,boxI))
     #Areas A B I
     Areas = (boxes[:,2] - boxes[:,0]) * (boxes[:,3] - boxes[:,1])
@@ -42,11 +44,15 @@ def matchBoxes(trackedBoxes,curBoxes):
     IoUMatrix = np.empty((trackedBoxes.shape[0],curBoxes.shape[0]))
     for i in range(trackedBoxes.shape[0]):
         for j in range(curBoxes.shape[0]):
-            IoUMatrix[i][j] = intersectionOverUnion(trackedBoxes[i,:],curBoxes[j,:])*-1
+            IoU = intersectionOverUnion(trackedBoxes[i,:],curBoxes[j,:])*-1
+            if IoU == 0:
+                IoU = 1
+            IoUMatrix[i][j] = IoU
 
     if(IoUMatrix.shape[0] > 0) and IoUMatrix.shape[1] > 0:
-        return scipy.optimize.linear_sum_assignment(IoUMatrix)
-    else return None
+        return scipy.optimize.linear_sum_assignment(IoUMatrix),IoUMatrix
+    else:
+        return (np.array([]),np.array([])),IoUMatrix
 
 def runTestCase(boxAList, boxBList, boxITruthList, testCaseName):
   boxA = np.array(boxAList)
@@ -74,6 +80,7 @@ def unitTestMain():
   runTestCase([2,3,4,5], [100, 101, 10, 11], None, "NoIntersection")
   runTestCase([1,2,10,11], [7,20,15,16], None, "NoIntersectionY")
   runTestCase([5,6,10,11], [20,3,2,8], None, "NoIntersectionX")
+  runTestCase([621,286,717,505], [477,276,537,489], None, "NoIntersectionWeird")
   runTestCase([5,10,15,20], [5,15,15,25], [5,15,15,20], "1/3rd Overlap")
 
 unitTestMain()

@@ -10,6 +10,7 @@ from nms import *
 import pdb
 import os
 
+
 # Pretrained classes in the model
 classNames = {0: 'background',
               1: 'person', 2: 'bicycle', 3: 'car', 4: 'motorcycle', 5: 'airplane', 6: 'bus',
@@ -67,6 +68,9 @@ kDetectionThreshold = 0.43
 
 def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
+    colors = np.array([(255,0,0), (255,128,0), (255,255,0), (128,255,0), (0,255,0), (0,255,128), (0,255,255), (128,255), (0,0,255), (127,0,255), (255,0,255), (255,0,127)])
+    #                   Red         Orange      Yellow     Yellow-Green   Green      Blue-Green     Cyan     Light-Blue     Blue    Violet          Magenta   Pink
+
     cap = cv2.VideoCapture(movieIn)
     out = cv2.VideoWriter(movieOut,cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1280,720))
 
@@ -83,7 +87,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
             start_time = time.time()
             image_height, image_width, _ = image.shape
 
-            model.setInput(cv2.dnn.blobFromImage(image, size=(640, 320), swapRB=True))
+            model.setInput(cv2.dnn.blobFromImage(image, size=(480, 320), swapRB=True))
 
             output = model.forward()
             #print(output[0,0,:,:])
@@ -110,39 +114,28 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     allCurBoxes = np.vstack((allCurBoxes, [int(box_x), int(box_y), int(box_width), int(box_height), confidence]))
 
             nmsOut = np.array(non_max_suppression(allCurBoxes[:,0:4],allCurBoxes[:,4]))
-            matches = matchBoxes(trackedBoxes,nmsOut[:,0:4])
-            if trackedBoxes.shape[0] != 0:
-                for i in range(curBoxes.shape[0]):
-                    row = curBoxes[i]
-                    cv2.rectangle(image, (int(row[0]), int(row[1])), (int(row[2]), int(row[3])), (0, 0, 255), thickness=1)
             curBoxes = np.empty((0,4))
             if nmsOut.shape[0] != 0:
                 curBoxes = nmsOut[:,0:4]
-                probs = nmsOut[:,4]
+                allMatches, IoUMatrix = matchBoxes(trackedBoxes,curBoxes)
+                matches = allMatches
+                for i in range(allMatches[0].shape[0]):
+                    if IoUMatrix[allMatches[0][i],allMatches[1][i]] == 1: #Positive Sentinel value because matrix entries are negative if there is an intersection
+                        matches = (np.delete(allMatches[0],i), np.delete(allMatches[1],i))
+                for i in range(trackedBoxes.shape[0]):
+                    trackedBox = trackedBoxes[i]
+                    color = (0, 0, 255) #Red tracked box if no match. Yellow if match.
+                    if i in matches[0]:
+                        color = (0,200,255)
+                    cv2.rectangle(image, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
                 for i in range(curBoxes.shape[0]):
-                    row = curBoxes[i]
-                    cv2.rectangle(image, (int(row[0]), int(row[1])), (int(row[2]), int(row[3])), (23, 230, 210), thickness=1)
-                    #db.set_trace()
-                    cv2.putText(image, str(probs[i]) , (int(row[0]),int(row[1])),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
-            #if trackedBoxes.shape[0] != 0 and nmsOut.shape[0] != 0:
-
+                    curBox = curBoxes[i]
+                    color = (255,0,0)#Blue if no match. Cyan if match.
+                    if i in matches[1]:
+                        color = (255,200,0)
+                    cv2.rectangle(image, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=1)
+            #pdb.set_trace()
             trackedBoxes = curBoxes
-            """if(range(curBoxes.shape[0] >= 2)):
-                for i in range(curBoxes.shape[0]):
-                    for j in range(curBoxes.shape[0]):
-                        if(j != i):
-                            iBox = intersection(curBoxes[i], curBoxes[j])
-                            #cv2.rectangle(image, (int(iBox[0]), int(iBox[1])), ((int(iBox[2]-iBox[0])), int(iBox[3]-iBox[1])), (23, 230, 0), thickness=1)
-                            if not np.all(iBox == None):
-                                cv2.rectangle(image, (int(iBox[0]), int(iBox[1])), ((int(iBox[2])), int(iBox[3])), (255, 0, 0), thickness=1)
-                            else:
-                                print("detections do not overlap")
-                            #cv2.rectangle(image, (int(iBox[0]), int(iBox[1])), ((int(iBox[2]-iBox[0])), int(iBox[3]-iBox[1])), (23, 230, 0), thickness=1)
-                            #print(iBox)
-
-                            #cv2.circle(image, (int(iBox[0][0]+iBox[1][0]),int(iBox[0][1]+iBox[1][1])) ,20,(0, 255, 0),thickness = 5)
-                            #cv2.circle(image, (int(iBox[0][0]), int(iBox[0][1])) ,20,(0, 255, 0),thickness = 5)
-                            #cv2.circle(image, (int(iBox[1][0]), int(iBox[1][1])) ,20,(0, 255, 0),thickness = 5)"""
             out.write(image)
             cv2.imshow('image', image)
         else:
@@ -152,7 +145,6 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
         if k == 0xFF & ord("q"):
             break
         # cv2.imwrite("image_box_text.jpg",image)
-        #pdb.set_trace()
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
@@ -160,9 +152,10 @@ for file in os.listdir(movieDir):
     if(file[-3:] == "mov"):
         print(file[0:-4])
         video = os.path.join(movieDir,file)
-        labelVideo(model0,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSDLite-v2/' + file[0:-4] + 'Labeled.avi')
+        labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')
         #labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')
 
 #pdb.set_trace()
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
+#labelVideo(model0,kDetectionThreshold,5,'/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov','/Users/arygout/Documents/aaStuff/computerVision/AryaWalkingLabeled.avi')
