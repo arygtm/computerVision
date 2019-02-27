@@ -4,7 +4,6 @@
 import cv2
 import time
 import numpy as np
-#from imutils import non_max_suppression
 from intersection import *
 from nms import *
 import pdb
@@ -70,13 +69,12 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
     colors = np.array([(255,0,0), (255,128,0), (255,255,0), (128,255,0), (0,255,0), (0,255,128), (0,255,255), (128,255), (0,0,255), (127,0,255), (255,0,255), (255,0,127)])
     #                   Red         Orange      Yellow     Yellow-Green   Green      Blue-Green     Cyan     Light-Blue     Blue    Violet          Magenta   Pink
-
     cap = cv2.VideoCapture(movieIn)
     out = cv2.VideoWriter(movieOut,cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1280,720))
 
     frameCounter = -1
 
-    trackedBoxes = np.empty((0,4))
+    trackedBoxes = np.empty((0,5))#x1, y1, x2, y2, numDetections
 
     while(True):
         frameCounter += 1
@@ -126,15 +124,16 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     trackedBox = trackedBoxes[i]
                     color = (0, 0, 255) #Red tracked box if no match. Yellow if match.
                     if i in matches[0]:
-                        color = (0,200,255)
+                        #color = (0,200,255)
+                        color = colors[i]
                     cv2.rectangle(image, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
                 for i in range(curBoxes.shape[0]):
                     curBox = curBoxes[i]
                     color = (255,0,0)#Blue if no match. Cyan if match.
                     if i in matches[1]:
-                        color = (255,200,0)
+                        #color = (255,200,0)
+                        color = colors[i]
                     cv2.rectangle(image, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=1)
-            #pdb.set_trace()
             trackedBoxes = curBoxes
             out.write(image)
             cv2.imshow('image', image)
@@ -148,14 +147,13 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-for file in os.listdir(movieDir):
+"""for file in os.listdir(movieDir):
     if(file[-3:] == "mov"):
         print(file[0:-4])
         video = os.path.join(movieDir,file)
-        labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')
+        labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')"""
         #labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')
 
-#pdb.set_trace()
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
-#labelVideo(model0,kDetectionThreshold,5,'/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov','/Users/arygout/Documents/aaStuff/computerVision/AryaWalkingLabeled.avi')
+labelVideo(model0,kDetectionThreshold,5,'/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov','/Users/arygout/Documents/aaStuff/computerVision/AryaWalkingLabeled.avi')

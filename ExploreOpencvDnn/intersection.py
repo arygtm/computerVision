@@ -20,17 +20,17 @@ def overlap2D(boxA,boxB):
                    np.min((boxA[1] + boxA[3], boxB[1] + boxB[3]))])
   return boxI"""
 
+#Finds the intersection between two boxes and returns that bounding box. If there is no overlap None is returned
 def intersection(boxA, boxB):
   if not overlap2D(boxA, boxB):
       return None
-  print(boxA)
-  print(boxB)
   boxI = np.array([np.max((boxA[0], boxB[0])),
                    np.max((boxA[1], boxB[1])),
                    np.min((boxA[2], boxB[2])),
                    np.min((boxA[3], boxB[3]))])
   return boxI
 
+#Takes in two boxes and returns the area of the intersection divided by the area of the union.
 def intersectionOverUnion(boxA,boxB):
     boxI = intersection(boxA,boxB)
     if np.all(boxI) == None:
@@ -40,6 +40,9 @@ def intersectionOverUnion(boxA,boxB):
     Areas = (boxes[:,2] - boxes[:,0]) * (boxes[:,3] - boxes[:,1])
     return Areas[2] / (Areas[0] + Areas[1] - Areas[2])
 
+#Takes in a vector of trackedBoxes and a vector of curBoxes and matches tracked boxes with curBoxes based on the
+#intersection over union. Does this by computing an intersectino over union matrix and optimizing matches using linear_sum_assignment
+#If there are no boxes then empty arrays are returned
 def matchBoxes(trackedBoxes,curBoxes):
     IoUMatrix = np.empty((trackedBoxes.shape[0],curBoxes.shape[0]))
     for i in range(trackedBoxes.shape[0]):
@@ -54,6 +57,7 @@ def matchBoxes(trackedBoxes,curBoxes):
     else:
         return (np.array([]),np.array([])),IoUMatrix
 
+#Used to run test cases and validate intersection related methods
 def runTestCase(boxAList, boxBList, boxITruthList, testCaseName):
   boxA = np.array(boxAList)
   boxB = np.array(boxBList)
@@ -69,9 +73,10 @@ def runTestCase(boxAList, boxBList, boxITruthList, testCaseName):
   print("boxB",boxB)
   print("boxITruth", boxITruth)
   print("boxIPredicted", boxIPredicted)
-  pdb.set_trace()
+  pdb.set_trace()#Stops the program with pdb if a test case fails
   return False
 
+#Stores all test cases
 def unitTestMain():
   runTestCase([3,4,23,20], [9,10,34,30], [9,10,23,20], "Basic")
   runTestCase([3,5,17,22], [1,2,11,15], [3,5,11,15], "ABFlipped")
