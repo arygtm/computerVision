@@ -7,6 +7,9 @@ from intersection import *
 from nms import *
 import pdb
 import os
+import serial
+
+
 
 # Pretrained classes in the model
 classNames = {0: 'background',
@@ -27,6 +30,10 @@ classNames = {0: 'background',
               80: 'toaster', 81: 'sink', 82: 'refrigerator', 84: 'book', 85: 'clock',
               86: 'vase', 87: 'scissors', 88: 'teddy bear', 89: 'hair drier', 90: 'toothbrush'}
 
+
+
+
+#https://www.arduino.cc/en/Tutorial.StringToIntExample
 
 def id_class_name(class_id, classes):
     for key, value in classes.items():
@@ -52,17 +59,29 @@ frameSkip = 5 #How many frames to skip so the network doesn't lag by processing 
 
 trackedBoxes = np.empty((0,5))#x1, y1, x2, y2, numDetections
 
+kImageWidthPx = 1450
+
+kCameraFOVRads = 0.835;
+
+def writeServoPos(spd):
+    ser.write((str(spd) + "\n").encode())
+
+ser = serial.Serial('/dev/cu.usbmodem1411')#Set this to the actual serial port name
+
+curServoPosDeg = 90
+
+targetServoPosDeg = 90
+
+out = cv2.VideoWriter("trackerOut.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1280,720))
+
 while(True):
     frameCounter += 1
     r, image = cap.read()
-    if frameCounter % frameSkip != 0:
-        continue
     if r:
         start_time = time.time()
         image_height, image_width, _ = image.shape
 
         model.setInput(cv2.dnn.blobFromImage(image, size=(480, 320), swapRB=True))#Blob is 480x320 which gives decent accuracy and a speed of 10 fps
-
         output = model.forward()#Finds the detections
 
 
@@ -113,19 +132,32 @@ while(True):
         trackedBoxes = curBoxes #Saves current boxes to tracked boxes
         #out.write(image)
 
-        #tinyIMG = np.empty((640,480))
-        #cv2.resize(image, tinyIMG, tinyIMG)
-        cv2.imshow('image', image)
-    else:
-        break
+
+        #servoTimerStart = time.time()
+        if(curBoxes.shape[0] > 0):
+            curBoxCenter = ((curBoxes[0,0] + curBoxes[0,2])/2 + (trackedBoxes[0,0] + trackedBoxes[0,2])/2 )/2
+            #pdb.set_trace()
+            cv2.circle(img = image, center = (int(curBoxCenter), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+            servoIncrementDeg = int(np.round(-90 / np.pi * np.arctan2( -(curBoxCenter - kImageWidthPx/2) / (kImageWidthPx / (2 * np.tan(kCameraFOVRads/2) ) ), 1)))
+            targetServoPosDeg += servoIncrementDeg
+            writeServoPos(targetServoPosDeg)
+            servoDelay = int(0.2/60*abs(servoIncrementDeg)*1.2+1)
+            print("delay ", servoDelay)
+            cv2.waitKey(servoDelay)
+            print(curBoxCenter, servoIncrementDeg, targetServoPosDeg)
+
+        tinyIMG = np.empty((640,480))
+        tinyIMG = cv2.resize(src = image, dst = tinyIMG, dsize = tinyIMG.shape)
+        cv2.imshow('image', tinyIMG)
+
     k = cv2.waitKey(1)
 
     if k == 0xFF & ord("q"):
         break
 
     end_time = time.time()#Checks the time to label a single frame. Allows for easy comparison of networks.
-    print("Elapsed Time:",end_time-start_time)
+    #print("Elapsed Time:",end_time-start_time)
 
 
-cv2.waitKey(0)
+#cv2.waitKey(0)
 cv2.destroyAllWindows()

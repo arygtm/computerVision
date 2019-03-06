@@ -3,9 +3,9 @@ import numpy as np
 
 
 #Reads in video and captures images when c is pressed. Used to take chessboard images
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 
-imgCounter = 0
+imgCounter = 14
 
 while True:
     ret, frame = cap.read()
@@ -15,7 +15,7 @@ while True:
         if key == ord('q'):
             break
         elif key == ord('c'):
-            cv2.imwrite('Chessboards/chessboard' + str(imgCounter) + '.png', frame)
+            cv2.imwrite('Chessboards/C930e/Original/chessboard' + str(imgCounter) + '.png', frame)
             imgCounter += 1
 
 

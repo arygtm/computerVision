@@ -16,7 +16,8 @@ objp[:, :2] = np.mgrid[0:cbcol, 0:cbrow].T.reshape(-1, 2)
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
 imgpoints = [] # 2d points in image plane.
-images = glob.glob('Chessboards/*.png')
+images = glob.glob('Chessboards/C930e/Original/*.png')
+print("finished globbing")
 for fname in images:
     img = cv2.imread(fname)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -24,19 +25,21 @@ for fname in images:
     ret, corners = cv2.findChessboardCorners(gray, (cbcol, cbrow), None)
     # If found, add object points, image points (after refining them)
     if ret == True:
+        print("found corners", fname)
         objpoints.append(objp)
         corners2 = cv2.cornerSubPix(gray,corners, (11,11), (-1,-1), criteria)
         imgpoints.append(corners)
         # Draw and display the corners
         cv2.drawChessboardCorners(img, (10,15), corners2, ret)
-        cv2.imwrite('Chessboards/Labeled/' + fname[12:-4] + 'Original.png', img)
-        cv2.imshow('img', img)
-        #cv2.waitKey(200)
+        imgName = fname[27:-4] + 'Labeled.png'
+        cv2.imwrite('Chessboards/C930e/Labeled/' + imgName, img)
+        #cv2.imshow('img', img)
+        #cv2.waitKey(500)
+    else:
+        print("did not find corners",fname)
 cv2.destroyAllWindows()
 
 ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None,None)
-
-cap = cv2.VideoCapture(0)
 
 """dist = np.array([-4.1802327176423804e-001, 5.0715244063187526e-001, 0, 0, -5.7843597214487474e-001])
 
@@ -72,7 +75,7 @@ cv2.destroyAllWindows()"""
 
 
 #Reads in the labeled chessboard images and undistorts them by using the camera undistortion  matrix.
-labeledImages = glob.glob('Chessboards/Labeled/*.png')
+labeledImages = glob.glob('Chessboards/C930e/Labeled/*.png')
 
 for fname in labeledImages:
     img = cv2.imread(fname)
@@ -85,5 +88,5 @@ for fname in labeledImages:
     #dst = dst[y:y+h, x:x+w]
 
     cv2.imshow('dst', dst)
-    cv2.waitKey(200)
-    cv2.imwrite('Chessboards/Calibrated/' + fname[20:-11] + 'Undistorted.png',dst)
+    #cv2.waitKey(200)
+    cv2.imwrite('Chessboards/C930e/Undistorted/' + fname[26:-11] + 'Undistorted.png',dst)
