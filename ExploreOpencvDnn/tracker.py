@@ -3,7 +3,7 @@
 import cv2
 import time
 import numpy as np
-from intersection import *
+from intersectionOld import *
 from nms import *
 import pdb
 import os
@@ -55,22 +55,20 @@ cap = cv2.VideoCapture(0)
 
 frameCounter = -1
 
-frameSkip = 5 #How many frames to skip so the network doesn't lag by processing every single frame
-
 trackedBoxes = np.empty((0,5))#x1, y1, x2, y2, numDetections
 
-kImageWidthPx = 1450
+kImageWidthPx = 1142*1920/1080
 
-kCameraFOVRads = 0.835;
+kCameraFOVRads = np.pi/2;
 
 def writeServoPos(spd):
     ser.write((str(spd) + "\n").encode())
 
-ser = serial.Serial('/dev/cu.usbmodem1411')#Set this to the actual serial port name
+ser = serial.Serial('/dev/cu.usbmodem14111')#Set this to the actual serial port name
 
-curServoPosDeg = 90
+#curServoPosDeg = 90
 
-targetServoPosDeg = 90
+#targetServoPosDeg = 90
 
 out = cv2.VideoWriter("trackerOut.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1280,720))
 
@@ -138,15 +136,15 @@ while(True):
             curBoxCenter = ((curBoxes[0,0] + curBoxes[0,2])/2 + (trackedBoxes[0,0] + trackedBoxes[0,2])/2 )/2
             #pdb.set_trace()
             cv2.circle(img = image, center = (int(curBoxCenter), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
-            servoIncrementDeg = int(np.round(-90 / np.pi * np.arctan2( -(curBoxCenter - kImageWidthPx/2) / (kImageWidthPx / (2 * np.tan(kCameraFOVRads/2) ) ), 1)))
-            targetServoPosDeg += servoIncrementDeg
-            writeServoPos(targetServoPosDeg)
-            servoDelay = int(0.2/60*abs(servoIncrementDeg)*1.2+1)
-            print("delay ", servoDelay)
-            cv2.waitKey(servoDelay)
-            print(curBoxCenter, servoIncrementDeg, targetServoPosDeg)
+            servoTargetDeg = int(np.round(-180 / np.pi * np.arctan2( -(curBoxCenter - kImageWidthPx/2) / (kImageWidthPx / (2 * np.tan(kCameraFOVRads/2) ) ), 1)))
+            #targetServoPosDeg += servoIncrementDeg
+            writeServoPos(servoTargetDeg + 97)
+            #servoDelay = int(0.2/60*abs(servoIncrementDeg)*1.2+1)
+            #print("delay ", servoDelay)
+            #cv2.waitKey(servoDelay)
+            print(curBoxCenter,servoTargetDeg)
 
-        tinyIMG = np.empty((640,480))
+        tinyIMG = np.empty((960,540))
         tinyIMG = cv2.resize(src = image, dst = tinyIMG, dsize = tinyIMG.shape)
         cv2.imshow('image', tinyIMG)
 

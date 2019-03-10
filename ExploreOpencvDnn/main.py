@@ -8,6 +8,7 @@ from intersection import *
 from nms import *
 import pdb
 import os
+from pykalman import KalmanFilter
 
 
 # Pretrained classes in the model
@@ -61,9 +62,36 @@ model1 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSD-v2/frozen_inference
 #Loads. 0.18fps. few detections.
 #model6 = cv2.dnn.readNetFromTensorflow('models/faster_rcnn_resnet101_kitti/frozen_inference_graph.pb','models/faster_rcnn_resnet101_kitti/faster_rcnn_resnet101_kitti.pbtxt')
 
-movieDir = '/Users/arygout/Documents/aaStuff/computerVision/BenchmarkVideos/'
+movieDir = '/Users/arygout/Documents/aaStuff/computerVision/BenchmarkVideos/C930e/'
 
 kDetectionThreshold = 0.43
+
+transitionMatrix = np.array( [[1, 0.3], [0, 1]] )
+observationMatrix = np.array([0,1])
+
+#transitionCov = np.array([[velstdev, 0],[0, velstdev]])
+#observationCov = np.array([pixstdev])
+
+#kf = KalmanFilter(transition_matrices = transitionMatrix, observation_matrices = observationMatrix, transition_covariance = transitionCov, observation_covariance = observationCov)
+
+
+
+def plotBoxes(trackedBoxes, curBoxes, matches):
+    for i in range(trackedBoxes.shape[0]):
+        trackedBox = trackedBoxes[i]
+        color = (0, 0, 255) #Red tracked box if no match. Yellow if match.
+        if i in matches[0]:
+            #color = (0,200,255)
+            color = colors[i]
+        cv2.rectangle(image, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
+
+    for i in range(curBoxes.shape[0]):
+        curBox = curBoxes[i]
+        color = (255,0,0)#Blue if no match. Cyan if match.
+        if i in matches[1]:
+            #color = (255,200,0)
+            color = colors[i]
+        cv2.rectangle(image, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=1)
 
 def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
@@ -76,6 +104,8 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
     trackedBoxes = np.empty((0,5))#x1, y1, x2, y2, numDetections
 
+    trackList = []
+
     while(True):
         frameCounter += 1
         r, image = cap.read()
@@ -85,7 +115,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
             start_time = time.time()
             image_height, image_width, _ = image.shape
 
-            model.setInput(cv2.dnn.blobFromImage(image, size=(480, 320), swapRB=True))
+            model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
 
             output = model.forward()
             #print(output[0,0,:,:])
@@ -115,26 +145,27 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
             curBoxes = np.empty((0,4))
             if nmsOut.shape[0] != 0:
                 curBoxes = nmsOut[:,0:4]
-                allMatches, IoUMatrix = matchBoxes(trackedBoxes,curBoxes)
-                matches = allMatches
-                for i in range(allMatches[0].shape[0]):
-                    if IoUMatrix[allMatches[0][i],allMatches[1][i]] == 1: #Positive Sentinel value because matrix entries are negative if there is an intersection
-                        matches = (np.delete(allMatches[0],i), np.delete(allMatches[1],i))
-                for i in range(trackedBoxes.shape[0]):
-                    trackedBox = trackedBoxes[i]
-                    color = (0, 0, 255) #Red tracked box if no match. Yellow if match.
-                    if i in matches[0]:
-                        #color = (0,200,255)
-                        color = colors[i]
-                    cv2.rectangle(image, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
-                for i in range(curBoxes.shape[0]):
-                    curBox = curBoxes[i]
-                    color = (255,0,0)#Blue if no match. Cyan if match.
-                    if i in matches[1]:
-                        #color = (255,200,0)
-                        color = colors[i]
-                    cv2.rectangle(image, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=1)
+
+                trackedBoxes = np.empty((len(trackList), 4))
+                for i, track in enumerate(trackList):
+                    trackedBoxes[i, :] = track.meas['box']
+
+                matches = matchBoxes(trackedBoxes,curBoxes)
+                plotBoxes(trackedBoxes, curBoxes, matches)
+
+            
+
+
             trackedBoxes = curBoxes
+
+            #if curBoxes.shape[0] > 0:
+            #    curBoxCenter = ((curBoxes[0,0] + curBoxes[0,2])/2
+                #pdb.set_trace()
+                #cv2.circle(img = image, center = (int(curBoxCenter), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+                #(filtered_state_mean, filtered_state_covariance) = kf.filter(curBoxCenter)
+
+                #cv2.circle(img = image, center = (int(filtered_state_mean), int(480)) , radius = 20 , color = (0, 0, 255), thickness = 4)
+
             out.write(image)
             cv2.imshow('image', image)
         else:
@@ -147,13 +178,14 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-"""for file in os.listdir(movieDir):
+for file in os.listdir(movieDir):
     if(file[-3:] == "mov"):
         print(file[0:-4])
         video = os.path.join(movieDir,file)
-        labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')"""
+        movieOutName = movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi'
+        labelVideo(model1,kDetectionThreshold,15,video,movieOutName)
         #labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')
 
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
-labelVideo(model0,kDetectionThreshold,5,'/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov','/Users/arygout/Documents/aaStuff/computerVision/AryaWalkingLabeled.avi')
+#labelVideo(model0,kDetectionThreshold,5,'/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov','/Users/arygout/Documents/aaStuff/computerVision/AryaWalkingLabeled.avi')

@@ -1,6 +1,7 @@
 import numpy as np
 import pdb
 import scipy.optimize
+import constants
 
 def overlap1D(a1,a2,b1,b2):
     return (a1 <= b1 and a2 >= b1) or (a1 >= b1 and a1 <= b2)
@@ -10,6 +11,7 @@ def overlap2D(boxA,boxB):
     return overlap1D(boxA[0], boxA[2], boxB[0], boxB[2]) and overlap1D(boxA[1], boxA[3], boxB[1], boxB[3])
 
 """def intersection(boxA, boxB):
+
   if not overlap2D(boxA, boxB):
       return None
   print(boxA)
@@ -53,9 +55,14 @@ def matchBoxes(trackedBoxes,curBoxes):
             IoUMatrix[i][j] = IoU
 
     if(IoUMatrix.shape[0] > 0) and IoUMatrix.shape[1] > 0:
-        return scipy.optimize.linear_sum_assignment(IoUMatrix),IoUMatrix
+        allMatches = scipy.optimize.linear_sum_assignment(IoUMatrix)
+        matches = allMatches
+        for i in range(allMatches[0].shape[0]):
+            if IoUMatrix[allMatches[0][i],allMatches[1][i]] == 1: #Positive Sentinel value because matrix entries are negative if there is an intersection
+                matches = (np.delete(allMatches[0],i), np.delete(allMatches[1],i))
+        return matches
     else:
-        return (np.array([]),np.array([])),IoUMatrix
+        return (np.array([]),np.array([]))
 
 #Used to run test cases and validate intersection related methods
 def runTestCase(boxAList, boxBList, boxITruthList, testCaseName):

@@ -16,7 +16,12 @@ objp[:, :2] = np.mgrid[0:cbcol, 0:cbrow].T.reshape(-1, 2)
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
 imgpoints = [] # 2d points in image plane.
-images = glob.glob('Chessboards/C930e/Original/*.png')
+
+cameraName = 'C930e'
+
+images = glob.glob('Chessboards/' + cameraName + '/Original/*.png')
+
+#images = glob.glob('Chessboards/C930e/Original/*.png')
 print("finished globbing")
 for fname in images:
     img = cv2.imread(fname)
@@ -32,7 +37,7 @@ for fname in images:
         # Draw and display the corners
         cv2.drawChessboardCorners(img, (10,15), corners2, ret)
         imgName = fname[27:-4] + 'Labeled.png'
-        cv2.imwrite('Chessboards/C930e/Labeled/' + imgName, img)
+        cv2.imwrite('Chessboards/' + cameraName + 'Labeled/' + imgName, img)
         #cv2.imshow('img', img)
         #cv2.waitKey(500)
     else:
@@ -40,6 +45,10 @@ for fname in images:
 cv2.destroyAllWindows()
 
 ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None,None)
+
+pdb.set_trace()
+
+print(mtx)
 
 """dist = np.array([-4.1802327176423804e-001, 5.0715244063187526e-001, 0, 0, -5.7843597214487474e-001])
 
@@ -75,7 +84,7 @@ cv2.destroyAllWindows()"""
 
 
 #Reads in the labeled chessboard images and undistorts them by using the camera undistortion  matrix.
-labeledImages = glob.glob('Chessboards/C930e/Labeled/*.png')
+labeledImages = glob.glob('Chessboards/' + cameraName + '/Labeled/*.png')
 
 for fname in labeledImages:
     img = cv2.imread(fname)
@@ -89,4 +98,4 @@ for fname in labeledImages:
 
     cv2.imshow('dst', dst)
     #cv2.waitKey(200)
-    cv2.imwrite('Chessboards/C930e/Undistorted/' + fname[26:-11] + 'Undistorted.png',dst)
+    cv2.imwrite('Chessboards/' + cameraName + '/Undistorted/' + fname[26:-11] + 'Undistorted.png',dst)
