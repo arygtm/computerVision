@@ -4,12 +4,14 @@
 import cv2
 import time
 import numpy as np
-from intersection import *
-from nms import *
+import intersection
+import aryaNms
 import pdb
 import os
 from pykalman import KalmanFilter
-
+import constants
+from track import Track
+import pickle
 
 # Pretrained classes in the model
 classNames = {0: 'background',
@@ -76,23 +78,6 @@ observationMatrix = np.array([0,1])
 
 
 
-def plotBoxes(trackedBoxes, curBoxes, matches):
-    for i in range(trackedBoxes.shape[0]):
-        trackedBox = trackedBoxes[i]
-        color = (0, 0, 255) #Red tracked box if no match. Yellow if match.
-        if i in matches[0]:
-            #color = (0,200,255)
-            color = colors[i]
-        cv2.rectangle(image, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
-
-    for i in range(curBoxes.shape[0]):
-        curBox = curBoxes[i]
-        color = (255,0,0)#Blue if no match. Cyan if match.
-        if i in matches[1]:
-            #color = (255,200,0)
-            color = colors[i]
-        cv2.rectangle(image, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=1)
-
 def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
     colors = np.array([(255,0,0), (255,128,0), (255,255,0), (128,255,0), (0,255,0), (0,255,128), (0,255,255), (128,255), (0,0,255), (127,0,255), (255,0,255), (255,0,127)])
@@ -106,26 +91,35 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
     trackList = []
 
+    prevPrediction = 0
+
+    measurement = np.array([])
+
+    timeStamp = np.array([])
+
+    filterState = np.empty((0,2))
+
+    filterCovariance = np.empty((0,2,2))
+
+    isSelected = np.array([])
+
     while(True):
         frameCounter += 1
         r, image = cap.read()
         if frameCounter % frameSkip != 0:
             continue
         if r:
-            start_time = time.time()
+            startTime = time.time()
             image_height, image_width, _ = image.shape
 
             model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
 
             output = model.forward()
-            #print(output[0,0,:,:])
 
-            end_time = time.time()#Checks the time to label a single frame. Allows for easy comparison of networks.
-            print("Elapsed Time:",end_time-start_time)
+            networkEndTime = time.time()#Checks the time to label a single frame. Allows for easy comparison of networks.
 
-            #boxes = non_max_suppression(output[0, 0, :, :])
-            #print(output[0, 0, :, :].shape)
-            allCurBoxes = np.empty((0,5))
+            allCurBoxes = np.empty((0,4))
+            allProbs = np.empty((0,1))
             for detection in output[0, 0, :, :]:
                 confidence = detection[2]
                 class_id = detection[1]
@@ -139,32 +133,102 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     box_height = detection[6] * image_height
                     #cv2.rectangle(image, (int(box_x), int(box_y)), (int(box_width), int(box_height)), (23, 230, 210), thickness=1)
                     #cv2.putText(image, str(detection[2]) ,(int(box_x), int(box_y)),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
-                    allCurBoxes = np.vstack((allCurBoxes, [int(box_x), int(box_y), int(box_width), int(box_height), confidence]))
-
-            nmsOut = np.array(non_max_suppression(allCurBoxes[:,0:4],allCurBoxes[:,4]))
-            curBoxes = np.empty((0,4))
-            if nmsOut.shape[0] != 0:
-                curBoxes = nmsOut[:,0:4]
-
-                trackedBoxes = np.empty((len(trackList), 4))
-                for i, track in enumerate(trackList):
-                    trackedBoxes[i, :] = track.meas['box']
-
-                matches = matchBoxes(trackedBoxes,curBoxes)
-                plotBoxes(trackedBoxes, curBoxes, matches)
-
-            
+                    allCurBoxes = np.vstack((allCurBoxes, [int(box_x), int(box_y), int(box_width), int(box_height)]))
+                    allProbs = np.vstack((allProbs, confidence))
 
 
-            trackedBoxes = curBoxes
+            curBoxes, curProbs = aryaNms.non_max_suppression(allCurBoxes, allProbs)
+            #if curBoxes.shape[0] != 0:
 
-            #if curBoxes.shape[0] > 0:
-            #    curBoxCenter = ((curBoxes[0,0] + curBoxes[0,2])/2
-                #pdb.set_trace()
-                #cv2.circle(img = image, center = (int(curBoxCenter), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
-                #(filtered_state_mean, filtered_state_covariance) = kf.filter(curBoxCenter)
+            trackedBoxes = np.empty((len(trackList), 4))
 
-                #cv2.circle(img = image, center = (int(filtered_state_mean), int(480)) , radius = 20 , color = (0, 0, 255), thickness = 4)
+            for i in range(len(trackList)):
+                trackedBoxes[i, :] = trackList[i].meas['box']
+
+            matches = intersection.matchBoxes(trackedBoxes,curBoxes)
+            for i in range(trackedBoxes.shape[0]):
+                trackedBox = trackedBoxes[i]
+                color = (0, 0, 255) #Red tracked box if no match. Yellow if match.
+                #if i in matches[0]:
+                    #color = (0,200,255)
+                    #color = colors[i % len(colors)]
+                cv2.rectangle(image, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
+
+            for i in range(curBoxes.shape[0]):
+                curBox = curBoxes[i]
+                color = (255,0,0)#Blue if no match. Cyan if match.
+                #if i in matches[1]:
+                    #color = (255,200,0)
+                    #color = colors[i % len(colors)]
+                cv2.rectangle(image, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
+
+            #Loop through all tracks, if there is a match update with match box, else update with None and check if it should be deleted
+            #Loop through all detections, if there is a match do nothing, else create new Track and append to tracklist
+            #Loop through all tracks check
+
+            #Update loop
+            for i in range(len(trackList)):
+                if i in matches[0]:
+                    curBoxMatchIndex = np.where(matches[0] == i)[0][0]
+                    newMeas = {'captureTime': networkEndTime, 'box': curBoxes[curBoxMatchIndex]}
+                    trackList[i].update(newMeas)
+                else:
+                    trackList[i].update(None)
+            #Delete Loop
+            for i in range(len(trackList)-1,0-1, -1):
+                if trackList[i].timesUnseenConsecutive > constants.timesUnseenConsecutiveMax:
+                    print('POPPING TRACK: ', i)
+                    trackList.pop(i)
+
+            for i in range(curBoxes.shape[0]):
+                if i not in matches[1]:
+                    initMeas = {'captureTime': networkEndTime, 'box': curBoxes[i]}
+                    trackList.append(Track(initMeas))
+
+
+
+            #Checks if a target is selected
+            targetSelected = False
+
+            selectedIndex = None
+
+            for i in range(len(trackList)):
+                if trackList[i].selected == True:
+                    targetSelected = True
+                    selectedIndex = i
+                    curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime+0.37)
+                    cv2.circle(img = image, center = (int(prevPrediction), int(480)) , radius = 20 , color = (0, 0, 255), thickness = 4)
+                    cv2.circle(img = image, center = (int(prevPrediction), int(480)) , radius = 1 , color = (0, 0, 255), thickness = 1)
+
+                    #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+                    #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 1 , color = (0, 255, 0), thickness = 1)
+                    prevPrediction = curBoxCenter[0]
+            #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
+            if not targetSelected:
+                bestTrack = {'index': None, 'timesSeenTotal': None}
+                for i in range(len(trackList)):
+                    if bestTrack['timesSeenTotal'] == None or trackList[i].timesSeenTotal > bestTrack['timesSeenTotal']:
+                        bestTrack = {'index': i, 'timesSeenTotal': trackList[i].timesSeenTotal}
+                #Select new target
+                if bestTrack['index'] != None:
+                    trackList[bestTrack['index']].selected = True
+                    targetSelected = True
+
+            if selectedIndex != None:
+                selectedTrack = trackList[selectedIndex]
+                measurement = np.append(measurement, (selectedTrack.meas['box'][0] + selectedTrack.meas['box'][2])/2)
+                timeStamp = np.append(timeStamp, selectedTrack.meas['captureTime'])
+                filterState = np.vstack((filterState, selectedTrack.filter.prevStateMean))
+                filterCovariance = np.concatenate((filterCovariance, np.reshape(selectedTrack.filter.prevStateCovariance, (1,2,2)) ), axis = 0)
+                isSelected = np.append(isSelected, 1)
+
+            else:
+                measurement = np.append(measurement, 0)
+                timeStamp = np.append(timeStamp, networkEndTime)
+                filterState = np.vstack((filterState, np.array([0,0])))
+                filterCovariance = np.concatenate((filterCovariance, np.zeros((1,2,2))), axis = 0)
+                isSelected = np.append(isSelected,0)
+
 
             out.write(image)
             cv2.imshow('image', image)
@@ -174,7 +238,25 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
         if k == 0xFF & ord("q"):
             break
+
+        elif k == 0xFF & ord("p"):
+            pdb.set_trace()
         # cv2.imwrite("image_box_text.jpg",image)
+
+        endTime = time.time()
+        print(endTime -  startTime)
+
+    dictionary = {
+        'measurement': measurement,
+        'timeStamp': timeStamp,
+        'filterState': filterState,
+        'filterCovariance': filterCovariance,
+        'isSelected': isSelected
+        }
+
+    pickleDir = '/Users/arygout/Documents/aaStuff/computerVision/'
+
+    pickle.dump(dictionary, open('videoDump.pkl', 'wb'))
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
@@ -183,8 +265,7 @@ for file in os.listdir(movieDir):
         print(file[0:-4])
         video = os.path.join(movieDir,file)
         movieOutName = movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi'
-        labelVideo(model1,kDetectionThreshold,15,video,movieOutName)
-        #labelVideo(model1,kDetectionThreshold,4,video,movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi')
+        labelVideo(model1,kDetectionThreshold,3,video,movieOutName)
 
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')

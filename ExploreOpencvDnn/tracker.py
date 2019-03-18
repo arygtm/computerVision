@@ -64,7 +64,7 @@ kCameraFOVRads = np.pi/2;
 def writeServoPos(spd):
     ser.write((str(spd) + "\n").encode())
 
-ser = serial.Serial('/dev/cu.usbmodem14111')#Set this to the actual serial port name
+ser = serial.Serial('/dev/cu.usbmodem14311')#Set this to the actual serial port name
 
 #curServoPosDeg = 90
 

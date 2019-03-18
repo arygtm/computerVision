@@ -95,4 +95,4 @@ def unitTestMain():
   runTestCase([621,286,717,505], [477,276,537,489], None, "NoIntersectionWeird")
   runTestCase([5,10,15,20], [5,15,15,25], [5,15,15,20], "1/3rd Overlap")
 
-unitTestMain()
+#unitTestMain()
