@@ -30,7 +30,7 @@ class Track():
         self.filter.update(newX, newMeas['captureTime'])
         self.meas = newMeas
 
-measurementVariance = 10**2
+measurementVariance = 30**2
 initStateCovariance = 100**2
 allVarianceV = 1.5**2
 bigT = 1

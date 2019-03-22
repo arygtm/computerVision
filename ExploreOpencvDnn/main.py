@@ -103,20 +103,42 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
     isSelected = np.array([])
 
+    selectedIndex = None
+
+    startTime = time.time()
+
     while(True):
         frameCounter += 1
         r, image = cap.read()
         if frameCounter % frameSkip != 0:
             continue
         if r:
-            startTime = time.time()
+            loopStartTime = time.time()
             image_height, image_width, _ = image.shape
 
-            model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
+            searchBox = None
+
+            if selectedIndex != None:
+
+                xDiff = trackList[selectedIndex].meas['box'][2] - trackList[selectedIndex].meas['box'][0]
+                yDiff = trackList[selectedIndex].meas['box'][3] - trackList[selectedIndex].meas['box'][1]
+                searchBox = np.array([
+                np.max(((trackList[selectedIndex].meas['box'][2] + trackList[selectedIndex].meas['box'][0])/2 - xDiff/2*6, 0)),
+                np.max(((trackList[selectedIndex].meas['box'][3] + trackList[selectedIndex].meas['box'][1])/2 - yDiff/2*3, 0)),
+                np.min(((trackList[selectedIndex].meas['box'][2] + trackList[selectedIndex].meas['box'][0])/2 + xDiff/2*6, image_width)),
+                np.min(((trackList[selectedIndex].meas['box'][3] + trackList[selectedIndex].meas['box'][1])/2 + yDiff/2*3, image_height)),
+                ])
+                cv2.rectangle(image, (int(searchBox[0]), int(searchBox[1])), (int(searchBox[2]), int(searchBox[3])), colors[9], thickness=1)
+
+                model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
+            else:
+                model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
 
             output = model.forward()
 
             networkEndTime = time.time()#Checks the time to label a single frame. Allows for easy comparison of networks.
+            cv2.putText(image, str(networkEndTime - startTime) ,(int(100), int(100)),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
+
 
             allCurBoxes = np.empty((0,4))
             allProbs = np.empty((0,1))
@@ -126,7 +148,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                 if confidence > detectionThreshold and class_id == 1:
 
                     class_name=id_class_name(class_id,classNames)
-                    print(str(str(class_id) + " " + str(detection[2])  + " " + class_name))
+                    #print(str(str(class_id) + " " + str(detection[2])  + " " + class_name))
                     box_x = detection[3] * image_width
                     box_y = detection[4] * image_height
                     box_width = detection[5] * image_width
@@ -135,7 +157,6 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     #cv2.putText(image, str(detection[2]) ,(int(box_x), int(box_y)),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
                     allCurBoxes = np.vstack((allCurBoxes, [int(box_x), int(box_y), int(box_width), int(box_height)]))
                     allProbs = np.vstack((allProbs, confidence))
-
 
             curBoxes, curProbs = aryaNms.non_max_suppression(allCurBoxes, allProbs)
             #if curBoxes.shape[0] != 0:
@@ -172,8 +193,11 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     curBoxMatchIndex = np.where(matches[0] == i)[0][0]
                     newMeas = {'captureTime': networkEndTime, 'box': curBoxes[curBoxMatchIndex]}
                     trackList[i].update(newMeas)
+                    print("updating track:", i, newMeas)
+
                 else:
                     trackList[i].update(None)
+                    print("updating track:", i, "None")
             #Delete Loop
             for i in range(len(trackList)-1,0-1, -1):
                 if trackList[i].timesUnseenConsecutive > constants.timesUnseenConsecutiveMax:
@@ -185,12 +209,8 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     initMeas = {'captureTime': networkEndTime, 'box': curBoxes[i]}
                     trackList.append(Track(initMeas))
 
-
-
             #Checks if a target is selected
             targetSelected = False
-
-            selectedIndex = None
 
             for i in range(len(trackList)):
                 if trackList[i].selected == True:
@@ -203,8 +223,10 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
                     #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 1 , color = (0, 255, 0), thickness = 1)
                     prevPrediction = curBoxCenter[0]
+
             #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
             if not targetSelected:
+                selectedIndex = None
                 bestTrack = {'index': None, 'timesSeenTotal': None}
                 for i in range(len(trackList)):
                     if bestTrack['timesSeenTotal'] == None or trackList[i].timesSeenTotal > bestTrack['timesSeenTotal']:
@@ -221,7 +243,6 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                 filterState = np.vstack((filterState, selectedTrack.filter.prevStateMean))
                 filterCovariance = np.concatenate((filterCovariance, np.reshape(selectedTrack.filter.prevStateCovariance, (1,2,2)) ), axis = 0)
                 isSelected = np.append(isSelected, 1)
-
             else:
                 measurement = np.append(measurement, 0)
                 timeStamp = np.append(timeStamp, networkEndTime)
@@ -244,7 +265,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
         # cv2.imwrite("image_box_text.jpg",image)
 
         endTime = time.time()
-        print(endTime -  startTime)
+        print(endTime - loopStartTime)
 
     dictionary = {
         'measurement': measurement,
@@ -256,7 +277,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
     pickleDir = '/Users/arygout/Documents/aaStuff/computerVision/'
 
-    pickle.dump(dictionary, open('videoDump.pkl', 'wb'))
+    #pickle.dump(dictionary, open('videoDump.pkl', 'wb'))
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
