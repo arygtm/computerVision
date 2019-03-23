@@ -69,6 +69,5 @@ def non_max_suppression(boxes, probs=None, overlapThresh=0.3):
 	# return only the bounding boxes that were picked
 	#print( np.hstack( ( np.array(boxes[pick].astype("int")), np.reshape(np.array(probs[pick]),(1,1)) ) ) )
 	probsList = probs[pick[0]]
-	print('using this nms')
 	return np.array(boxes[pick[0]].astype("int")), np.reshape(np.array(probsList),(len(probsList),1))
 	#return boxes[pick].astype("int")
