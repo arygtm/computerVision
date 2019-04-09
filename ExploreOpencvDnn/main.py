@@ -64,7 +64,7 @@ model1 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSD-v2/frozen_inference
 #Loads. 0.18fps. few detections.
 #model6 = cv2.dnn.readNetFromTensorflow('models/faster_rcnn_resnet101_kitti/frozen_inference_graph.pb','models/faster_rcnn_resnet101_kitti/faster_rcnn_resnet101_kitti.pbtxt')
 
-movieDir = '/Users/arygout/Documents/aaStuff/computerVision/BenchmarkVideos/C930e/'
+movieDir = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/C930e/'
 
 kDetectionThreshold = 0.43
 
@@ -107,38 +107,49 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
 
     startTime = time.time()
 
+    kSearchBoxHalfWidth = 320 #TODO: 320
+    kSearchBoxHalfHeight = 1000 #TODO: 180
+
     while(True):
         frameCounter += 1
-        r, image = cap.read()
+        r, imageOrig = cap.read()
         if frameCounter % frameSkip != 0:
             continue
         if r:
             loopStartTime = time.time()
-            image_height, image_width, _ = image.shape
+            orig_height, orig_width, _ = imageOrig.shape
 
-            searchBox = None
+            searchBox = np.array([0,0,orig_width,orig_height])
 
-            if selectedIndex != None:
+            cropping = False
+            if selectedIndex is not None:
 
                 xDiff = trackList[selectedIndex].meas['box'][2] - trackList[selectedIndex].meas['box'][0]
                 yDiff = trackList[selectedIndex].meas['box'][3] - trackList[selectedIndex].meas['box'][1]
                 searchBox = np.array([
-                np.max(((trackList[selectedIndex].meas['box'][2] + trackList[selectedIndex].meas['box'][0])/2 - xDiff/2*6, 0)),
-                np.max(((trackList[selectedIndex].meas['box'][3] + trackList[selectedIndex].meas['box'][1])/2 - yDiff/2*3, 0)),
-                np.min(((trackList[selectedIndex].meas['box'][2] + trackList[selectedIndex].meas['box'][0])/2 + xDiff/2*6, image_width)),
-                np.min(((trackList[selectedIndex].meas['box'][3] + trackList[selectedIndex].meas['box'][1])/2 + yDiff/2*3, image_height)),
+                np.max(((trackList[selectedIndex].meas['box'][2] + trackList[selectedIndex].meas['box'][0])/2 - kSearchBoxHalfWidth, 0)),
+                np.max(((trackList[selectedIndex].meas['box'][3] + trackList[selectedIndex].meas['box'][1])/2 - kSearchBoxHalfHeight, 0)),
+                np.min(((trackList[selectedIndex].meas['box'][2] + trackList[selectedIndex].meas['box'][0])/2 + kSearchBoxHalfWidth, orig_width)),
+                np.min(((trackList[selectedIndex].meas['box'][3] + trackList[selectedIndex].meas['box'][1])/2 + kSearchBoxHalfHeight, orig_height)),
                 ])
-                cv2.rectangle(image, (int(searchBox[0]), int(searchBox[1])), (int(searchBox[2]), int(searchBox[3])), colors[9], thickness=1)
+                cv2.rectangle(imageOrig, (int(searchBox[0]), int(searchBox[1])), (int(searchBox[2]), int(searchBox[3])), colors[9], thickness=1)
 
-                model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
+                searchBox = np.array([0,0,orig_width,orig_height])
+
+                searchBox = searchBox.astype(int)
+
+                image = imageOrig[searchBox[1]:searchBox[3],searchBox[0]:searchBox[2],:]
+                cropping = True
             else:
-                model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
+                image = imageOrig
+            model.setInput(cv2.dnn.blobFromImage(image, swapRB=True))
+
+            image_height, image_width, _ = image.shape
 
             output = model.forward()
 
             networkEndTime = time.time()#Checks the time to label a single frame. Allows for easy comparison of networks.
-            cv2.putText(image, str(networkEndTime - startTime) ,(int(100), int(100)),cv2.FONT_HERSHEY_SIMPLEX,(.001*image_width),(0, 0, 255))
-
+            cv2.putText(imageOrig, str(networkEndTime - startTime) ,(int(100), int(100)),cv2.FONT_HERSHEY_SIMPLEX,(.001*orig_width),(0, 0, 255))
 
             allCurBoxes = np.empty((0,4))
             allProbs = np.empty((0,1))
@@ -159,7 +170,14 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     allProbs = np.vstack((allProbs, confidence))
 
             curBoxes, curProbs = aryaNms.non_max_suppression(allCurBoxes, allProbs)
-            #if curBoxes.shape[0] != 0:
+
+            #if(curBoxes.shape[0] == 0):
+            #    pdb.set_trace()
+
+            for i in range(curBoxes.shape[0]):
+                row = np.copy(curBoxes[i])
+                rowShift = np.array([searchBox[0], searchBox[1], searchBox[0], searchBox[1]])
+                curBoxes[i] += rowShift
 
             trackedBoxes = np.empty((len(trackList), 4))
 
@@ -173,7 +191,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                 #if i in matches[0]:
                     #color = (0,200,255)
                     #color = colors[i % len(colors)]
-                cv2.rectangle(image, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
+                cv2.rectangle(imageOrig, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
 
             for i in range(curBoxes.shape[0]):
                 curBox = curBoxes[i]
@@ -181,7 +199,10 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                 #if i in matches[1]:
                     #color = (255,200,0)
                     #color = colors[i % len(colors)]
-                cv2.rectangle(image, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
+                #if not cropping:
+                #    cv2.rectangle(image, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
+                #else:
+                cv2.rectangle(imageOrig, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
 
             #Loop through all tracks, if there is a match update with match box, else update with None and check if it should be deleted
             #Loop through all detections, if there is a match do nothing, else create new Track and append to tracklist
@@ -193,15 +214,15 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     curBoxMatchIndex = np.where(matches[0] == i)[0][0]
                     newMeas = {'captureTime': networkEndTime, 'box': curBoxes[curBoxMatchIndex]}
                     trackList[i].update(newMeas)
-                    print("updating track:", i, newMeas)
+                    #print("updating track:", i, newMeas)
 
                 else:
                     trackList[i].update(None)
-                    print("updating track:", i, "None")
+                    #print("updating track:", i, "None")
             #Delete Loop
             for i in range(len(trackList)-1,0-1, -1):
                 if trackList[i].timesUnseenConsecutive > constants.timesUnseenConsecutiveMax:
-                    print('POPPING TRACK: ', i)
+                    #print('POPPING TRACK: ', i)
                     trackList.pop(i)
 
             for i in range(curBoxes.shape[0]):
@@ -213,16 +234,22 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
             targetSelected = False
 
             for i in range(len(trackList)):
-                if trackList[i].selected == True:
-                    targetSelected = True
-                    selectedIndex = i
-                    curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime+0.37)
-                    cv2.circle(img = image, center = (int(prevPrediction), int(480)) , radius = 20 , color = (0, 0, 255), thickness = 4)
-                    cv2.circle(img = image, center = (int(prevPrediction), int(480)) , radius = 1 , color = (0, 0, 255), thickness = 1)
+                if not trackList[i].selected:
+                    continue
 
-                    #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
-                    #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 1 , color = (0, 255, 0), thickness = 1)
-                    prevPrediction = curBoxCenter[0]
+                targetSelected = True
+                selectedIndex = i
+                curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime+0.37)
+
+                if curBoxCenter is None:
+                    continue
+
+                cv2.circle(img = imageOrig, center = (int(prevPrediction), int(480)) , radius = 20 , color = (0, 0, 255), thickness = 4)
+                cv2.circle(img = imageOrig, center = (int(prevPrediction), int(480)) , radius = 1 , color = (0, 0, 255), thickness = 1)
+
+                #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+                #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 1 , color = (0, 255, 0), thickness = 1)
+                prevPrediction = curBoxCenter[0]
 
             #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
             if not targetSelected:
@@ -232,7 +259,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                     if bestTrack['timesSeenTotal'] == None or trackList[i].timesSeenTotal > bestTrack['timesSeenTotal']:
                         bestTrack = {'index': i, 'timesSeenTotal': trackList[i].timesSeenTotal}
                 #Select new target
-                if bestTrack['index'] != None:
+                if bestTrack['index'] != None and trackList[bestTrack['index']].filter is not None:
                     trackList[bestTrack['index']].selected = True
                     targetSelected = True
 
@@ -251,8 +278,14 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
                 isSelected = np.append(isSelected,0)
 
 
-            out.write(image)
-            cv2.imshow('image', image)
+
+            out.write(imageOrig)
+            #if not cropping:
+            cv2.imshow('image', imageOrig)
+            #pdb.set_trace()
+
+            #else:
+            #    cv2.imshow('image', croppedImage)
         else:
             break
         k = cv2.waitKey(1)
@@ -265,7 +298,7 @@ def labelVideo(model,detectionThreshold,frameSkip,movieIn,movieOut):
         # cv2.imwrite("image_box_text.jpg",image)
 
         endTime = time.time()
-        print(endTime - loopStartTime)
+        #print(endTime - loopStartTime)
 
     dictionary = {
         'measurement': measurement,

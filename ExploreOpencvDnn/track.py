@@ -12,8 +12,10 @@ class Track():
         self.selected = False
 
     def predict(self, predTime):
-        mean = self.filter.predict(predTime)
-        return mean
+        if self.filter is None:
+            return (None, None)
+        mean, cov = self.filter.predict(predTime)
+        return (mean, cov)
 
     def update(self, newMeas):
         if newMeas is None:
