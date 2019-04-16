@@ -6,3 +6,5 @@ K = np.array( \
  [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
 
 timesUnseenConsecutiveMax = 5
+
+kDetectionThreshold = 0.43

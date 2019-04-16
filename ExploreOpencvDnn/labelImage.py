@@ -3,6 +3,7 @@ import numpy as np
 import aryaNms
 import pdb
 import constants
+import time
 
 # Pretrained classes in the model
 classNames = {0: 'background',
@@ -35,27 +36,40 @@ def id_class_name(class_id, classes):
 # Loading model
 
 #Works well 16fps
-model0 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
+#model0 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
 
 #Works well 14fps
-model = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSD-v2/frozen_inference_graph.pb','models/MobileNet-SSD-v2/ssd_mobilenet_v2_coco_2018_03_29.pbtxt')
+#model1 = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSD-v2/frozen_inference_graph.pb','models/MobileNet-SSD-v2/ssd_mobilenet_v2_coco_2018_03_29.pbtxt')
 
 colors = np.array([(255,0,0), (255,128,0), (255,255,0), (128,255,0), (0,255,0), (0,255,128), (0,255,255), (128,255), (0,0,255), (127,0,255), (255,0,255), (255,0,127)])
 
 #cv2.rectangle(imageOrig, (int(searchBox[0]), int(searchBox[1])), (int(searchBox[2]), int(searchBox[3])), colors[9], thickness=1)
 
-kDetectionThreshold = 0.43
 
-def findBoxes(imageOrig, searchBox, detectionThreshold):
+#Takes in an image and a search box. Crops the image and then runs the network to find detections.
+#Checks if detections are human and ensures that confidence is above threshold.
+#Then runs non-max suppression on detections and returns detections that are left along with a time stamp.
+def findBoxes(model,imageOrig, searchBox, detectionThreshold):
 
-    image = imageOrig[searchBox[1]:searchBox[3],searchBox[0]:searchBox[2],:]
+    image = None
 
+    if searchBox is not None:
+        #crops original image
+        image = imageOrig[searchBox[1]:searchBox[3],searchBox[0]:searchBox[2],:]
+
+    else:
+        image = imageOrig
+    #gets dimensions of new image
     image_height, image_width, _ = image.shape
 
+    #sets model input. No reshaping or scaling of image
     model.setInput(cv2.dnn.blobFromImage(image, swapRB=True))
 
+    #Runs the model and sets time stamp
     output = model.forward()
+    networkEndTime = time.time()
 
+    #Restructures output from model into more readable np array
     allCurBoxes = np.empty((0,4))
     allProbs = np.empty((0,1))
     for detection in output[0, 0, :, :]:
@@ -74,29 +88,39 @@ def findBoxes(imageOrig, searchBox, detectionThreshold):
             allCurBoxes = np.vstack((allCurBoxes, [int(box_x), int(box_y), int(box_width), int(box_height)]))
             allProbs = np.vstack((allProbs, confidence))
 
+    #Does non maxima suppression on all network detections
     curBoxes, curProbs = aryaNms.non_max_suppression(allCurBoxes, allProbs)
-    return curBoxes
+
+    #print('findBoxes')
+    cv2.imshow('croppedImage', image)
+    #pdb.set_trace()
+    return curBoxes, networkEndTime
 
 movieDir = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/C930e/'
 
-frame = cv2.imread(movieDir + 'AryaWalking.png')
 
-searchBox = np.array([100,0,800,720])
+#Test case with a single frame. Works consistently.
+testing = False
 
-curBoxes = findBoxes(frame, searchBox, kDetectionThreshold)
+if testing:
+    frame = cv2.imread(movieDir + 'AryaWalking.png')
 
-cv2.rectangle(frame, (int(searchBox[0]), int(searchBox[1])), (int(searchBox[2]), int(searchBox[3])), colors[9], thickness=1)
+    searchBox = np.array([0,0,363,720])
 
-for i in range(curBoxes.shape[0]):
-    row = np.copy(curBoxes[i])
-    rowShift = np.array([searchBox[0], searchBox[1], searchBox[0], searchBox[1]])
-    curBoxes[i] += rowShift
+    curBoxes, networkEndTime = findBoxes(frame, searchBox, constants.kDetectionThreshold)
 
-for i in range(curBoxes.shape[0]):
-    curBox = curBoxes[i]
-    color = (255,0,0)#Blue if no match. Cyan if match.
-    cv2.rectangle(frame, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
+    cv2.rectangle(frame, (int(searchBox[0]), int(searchBox[1])), (int(searchBox[2]), int(searchBox[3])), colors[9], thickness=1)
+    #Translate detections by upper left corner coords of search box
+    for i in range(curBoxes.shape[0]):
+        row = np.copy(curBoxes[i])
+        rowShift = np.array([searchBox[0], searchBox[1], searchBox[0], searchBox[1]])
+        curBoxes[i] += rowShift
+    #Draws current detections
+    for i in range(curBoxes.shape[0]):
+        curBox = curBoxes[i]
+        color = (255,0,0)#Blue if no match. Cyan if match.
+        cv2.rectangle(frame, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
 
-cv2.imshow('image', frame)
-cv2.waitKey(500)
-pdb.set_trace()
+    cv2.imshow('image', frame)
+    cv2.waitKey(500)
+    pdb.set_trace()
