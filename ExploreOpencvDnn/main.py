@@ -217,7 +217,7 @@ def labelVideo(frameSkip,movieIn,movieOut):
 
                 targetSelected = True
                 selectedIndex = i
-                curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime+0.37)
+                curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime + (networkEndTime - loopStartTime))
 
                 if curBoxCenter is None:
                     continue
@@ -291,7 +291,7 @@ for file in os.listdir(movieDir):
         print(file[0:-4])
         video = os.path.join(movieDir,file)
         movieOutName = movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi'
-        labelVideo(5,video,movieOutName)
+        labelVideo(6s,video,movieOutName)
 
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
