@@ -63,15 +63,18 @@ modelBig = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inf
 #Starts the camera
 cap = cv2.VideoCapture(0)
 #Starts a videowriter
-out = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOut.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1280,720))
+outLabeled = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutLabeled.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
+outOrig = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutOrig.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
 
 #Camera variables
-kImageWidthPx = 1280
+kImageWidthPx = 1920
 kCameraFOVRads = np.pi/2;
 
 #takes in a servo position in degrees and writes it to the serial port where the Arduino will read it and then move the servo.
+
+kServoOffsetDeg = 25
 def writeServoPos(spd):
-    ser.write((str(spd) + "\n").encode())
+    ser.write((str(spd + kServoOffsetDeg) + "\n").encode())
 
 ser = serial.Serial('/dev/cu.usbmodem14111')#Set this to the actual serial port name
 
@@ -83,7 +86,7 @@ prevPrediction = 0
 
 measurement = np.array([])
 
-timeStamp = np.array([])
+imageCaptureTimes = np.array([])
 
 filterState = np.empty((0,2))
 
@@ -106,12 +109,14 @@ prevFireTime = time.time()
 
 kalmanPredictionConst = 0.3
 
-while(True):
-    r, bigImg = cap.read()
-    if r:
-        imageOrig = cv2.resize(bigImg, (1280,720))
 
+while(True):
+    r, imageOrig = cap.read()
+    if r:
         loopStartTime = time.time()
+
+        outOrig.write(imageOrig)
+
         orig_height, orig_width, _ = imageOrig.shape
 
         searchBox = None
@@ -176,7 +181,7 @@ while(True):
         for i in range(len(trackList)):
             if i in matches[0]:
                 curBoxMatchIndex = np.where(matches[0] == i)[0][0]
-                newMeas = {'captureTime': networkEndTime, 'box': curBoxes[curBoxMatchIndex]}
+                newMeas = {'captureTime': loopStartTime, 'box': curBoxes[curBoxMatchIndex]}
                 trackList[i].update(newMeas)
                 #print("updating track:", i, newMeas)
 
@@ -191,7 +196,7 @@ while(True):
 
         for i in range(curBoxes.shape[0]):
             if i not in matches[1]:
-                initMeas = {'captureTime': networkEndTime, 'box': curBoxes[i]}
+                initMeas = {'captureTime': loopStartTime, 'box': curBoxes[i]}
                 trackList.append(Track(initMeas))
 
         #Checks if a target is selected
@@ -232,7 +237,7 @@ while(True):
 
             #Pickle Data dump
             measurement = np.append(measurement, (selectedTrack.meas['box'][0] + selectedTrack.meas['box'][2])/2)
-            timeStamp = np.append(timeStamp, selectedTrack.meas['captureTime'])
+            imageCaptureTimes = np.append(imageCaptureTimes, selectedTrack.meas['captureTime'])
             filterState = np.vstack((filterState, selectedTrack.filter.prevStateMean))
             filterCovariance = np.concatenate((filterCovariance, np.reshape(selectedTrack.filter.prevStateCovariance, (1,2,2)) ), axis = 0)
             isSelected = np.append(isSelected, 1)
@@ -245,28 +250,36 @@ while(True):
 
             curBoxCenter = curState[0]
 
+            points = np.array([curBoxCenter,540], dtype = np.float32)
+            points = np.reshape(points, (1,1,2))
+
+            undistCenter = cv2.undistortPoints(points, constants.K, constants.dist)[0,0,0]
+
+
+
             cv2.circle(img = imageOrig, center = (int(curBoxCenter), int(orig_height/2)) , radius = 20 , color = (0, 255, 0), thickness = 4)
-            servoTargetDeg = int(np.round(-180 / np.pi * np.arctan2( -(curBoxCenter - kImageWidthPx/2) / (kImageWidthPx / (2 * np.tan(kCameraFOVRads/2) ) ), 1)))
+            #servoTargetDeg = int(np.round(-180 / np.pi * np.arctan2( -(curBoxCenter - kImageWidthPx/2) / (kImageWidthPx / (2 * np.tan(kCameraFOVRads/2) ) ), 1)))
+            servoTargetDeg = np.arctan(undistCenter) * 180/np.pi
             if(networkEndTime - prevFireTime > 1):
                 ser.write(("f" + "\n").encode())
                 prevFireTime = networkEndTime
-            #writeServoPos(int(90+servoTargetDeg))
-            writeServoPos()
-            print(curBoxCenter,servoTargetDeg)
+            writeServoPos(int(90+servoTargetDeg))
+            #print(int(90+servoTargetDeg))
+            print("curBoxCenter", curBoxCenter, "undistCenter", undistCenter, "servoTargetDeg",servoTargetDeg)
 
 
 
         else:
             measurement = np.append(measurement, 0)
-            timeStamp = np.append(timeStamp, networkEndTime)
+            imageCaptureTimes = np.append(imageCaptureTimes, loopStartTime)
             filterState = np.vstack((filterState, np.array([0,0])))
             filterCovariance = np.concatenate((filterCovariance, np.zeros((1,2,2))), axis = 0)
             isSelected = np.append(isSelected,0)
 
-        print('time:', networkEndTime - loopStartTime)
-        out.write(imageOrig)
+        #print('time:', networkEndTime - loopStartTime)
+        outLabeled.write(imageOrig)
 
-        cv2.imshow('image', imageOrig)
+        cv2.imshow('image', cv2.resize(imageOrig, (1280,720))) #Resizing so image fits on screen
 
     else:
         break
@@ -284,7 +297,7 @@ while(True):
 
 dictionary = {
     'measurement': measurement,
-    'timeStamp': timeStamp,
+    'imageCaptureTimes': imageCaptureTimes,
     'filterState': filterState,
     'filterCovariance': filterCovariance,
     'isSelected': isSelected
@@ -292,7 +305,7 @@ dictionary = {
 
 pickleDir = '/Users/arygout/Documents/aaStuff/computerVision/'
 
-#pickle.dump(dictionary, open('videoDump.pkl', 'wb'))
+pickle.dump(dictionary, open('videoDump.pkl', 'wb'))
 ser.write(("s" + "\n").encode())
 cv2.waitKey(0)
 cv2.destroyAllWindows()

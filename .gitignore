@@ -3,3 +3,4 @@
 *~
 ExploreOpencvDnn/models/
 pbtxt/
+*.pkl
