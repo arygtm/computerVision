@@ -56,14 +56,16 @@ def findBoxes(model,imageOrig, searchBox, detectionThreshold):
     if searchBox is not None:
         #crops original image
         image = imageOrig[searchBox[1]:searchBox[3],searchBox[0]:searchBox[2],:]
+        model.setInput(cv2.dnn.blobFromImage(image, swapRB=True))
 
     else:
         image = imageOrig
+        model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
     #gets dimensions of new image
     image_height, image_width, _ = image.shape
 
     #sets model input. No reshaping or scaling of image
-    model.setInput(cv2.dnn.blobFromImage(image, swapRB=True))
+
 
     #Runs the model and sets time stamp
     output = model.forward()
@@ -91,9 +93,6 @@ def findBoxes(model,imageOrig, searchBox, detectionThreshold):
     #Does non maxima suppression on all network detections
     curBoxes, curProbs = aryaNms.non_max_suppression(allCurBoxes, allProbs)
 
-    #print('findBoxes')
-    cv2.imshow('croppedImage', image)
-    #pdb.set_trace()
     return curBoxes, networkEndTime
 
 movieDir = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/C930e/'

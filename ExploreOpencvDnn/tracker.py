@@ -4,7 +4,7 @@ import cv2
 import time
 import numpy as np
 from intersectionOld import *
-from nms import *
+from imutils import object_detection
 import pdb
 import os
 import serial
@@ -64,7 +64,7 @@ kCameraFOVRads = np.pi/2;
 def writeServoPos(spd):
     ser.write((str(spd) + "\n").encode())
 
-ser = serial.Serial('/dev/cu.usbmodem14311')#Set this to the actual serial port name
+ser = serial.Serial('/dev/cu.usbmodem14111')#Set this to the actual serial port name
 
 #curServoPosDeg = 90
 
@@ -99,7 +99,7 @@ while(True):
                 allCurBoxes = np.vstack((allCurBoxes, [int(box_x), int(box_y), int(box_width), int(box_height), confidence]))
 
         #Uses non-max supression to remove redundant detections, and leave only the detection with the highest network confidence
-        nmsOut = np.array(non_max_suppression(allCurBoxes[:,0:4],allCurBoxes[:,4]))
+        nmsOut = np.array(object_detection.non_max_suppression(allCurBoxes[:,0:4],allCurBoxes[:,4]))
         curBoxes = np.empty((0,4))
         if nmsOut.shape[0] != 0:
             curBoxes = nmsOut[:,0:4]
@@ -138,7 +138,7 @@ while(True):
             cv2.circle(img = image, center = (int(curBoxCenter), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
             servoTargetDeg = int(np.round(-180 / np.pi * np.arctan2( -(curBoxCenter - kImageWidthPx/2) / (kImageWidthPx / (2 * np.tan(kCameraFOVRads/2) ) ), 1)))
             #targetServoPosDeg += servoIncrementDeg
-            writeServoPos(servoTargetDeg + 97)
+            writeServoPos(int(servoTargetDeg*1.3 + 85))
             #servoDelay = int(0.2/60*abs(servoIncrementDeg)*1.2+1)
             #print("delay ", servoDelay)
             #cv2.waitKey(servoDelay)

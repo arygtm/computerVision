@@ -184,7 +184,6 @@ def labelVideo(frameSkip,movieIn,movieOut):
 
             #Loop through all tracks, if there is a match update with match box, else update with None and check if it should be deleted
             #Loop through all detections, if there is a match do nothing, else create new Track and append to tracklist
-            #Loop through all tracks check
 
             #Update loop
             for i in range(len(trackList)):
@@ -217,7 +216,7 @@ def labelVideo(frameSkip,movieIn,movieOut):
 
                 targetSelected = True
                 selectedIndex = i
-                curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime + (networkEndTime - loopStartTime))
+                curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime + 0.5)
 
                 if curBoxCenter is None:
                     continue
@@ -291,7 +290,7 @@ for file in os.listdir(movieDir):
         print(file[0:-4])
         video = os.path.join(movieDir,file)
         movieOutName = movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi'
-        labelVideo(6s,video,movieOutName)
+        labelVideo(6,video,movieOutName)
 
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
