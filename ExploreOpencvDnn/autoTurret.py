@@ -17,30 +17,31 @@ from random import randint
 import os
 import serial
 
-# Pretrained classes in the model
-classNames = {0: 'background',
-              1: 'person', 2: 'bicycle', 3: 'car', 4: 'motorcycle', 5: 'airplane', 6: 'bus',
-              7: 'train', 8: 'truck', 9: 'boat', 10: 'traffic light', 11: 'fire hydrant',
-              13: 'stop sign', 14: 'parking meter', 15: 'bench', 16: 'bird', 17: 'cat',
-              18: 'dog', 19: 'horse', 20: 'sheep', 21: 'cow', 22: 'elephant', 23: 'bear',
-              24: 'zebra', 25: 'giraffe', 27: 'backpack', 28: 'umbrella', 31: 'handbag',
-              32: 'tie', 33: 'suitcase', 34: 'frisbee', 35: 'skis', 36: 'snowboard',
-              37: 'sports ball', 38: 'kite', 39: 'baseball bat', 40: 'baseball glove',
-              41: 'skateboard', 42: 'surfboard', 43: 'tennis racket', 44: 'bottle',
-              46: 'wine glass', 47: 'cup', 48: 'fork', 49: 'knife', 50: 'spoon',
-              51: 'bowl', 52: 'banana', 53: 'apple', 54: 'sandwich', 55: 'orange',
-              56: 'broccoli', 57: 'carrot', 58: 'hot dog', 59: 'pizza', 60: 'donut',
-              61: 'cake', 62: 'chair', 63: 'couch', 64: 'potted plant', 65: 'bed',
-              67: 'dining table', 70: 'toilet', 72: 'tv', 73: 'laptop', 74: 'mouse',
-              75: 'remote', 76: 'keyboard', 77: 'cell phone', 78: 'microwave', 79: 'oven',
-              80: 'toaster', 81: 'sink', 82: 'refrigerator', 84: 'book', 85: 'clock',
-              86: 'vase', 87: 'scissors', 88: 'teddy bear', 89: 'hair drier', 90: 'toothbrush'}
+#Function won't work. Moved because we are not using it.
+def runSearchBox():
+    if selectedIndex is not None: #When a track is currently selected...
 
+        #ser.write(("w" + "\n").encode())
 
-def id_class_name(class_id, classes):
-    for key, value in classes.items():
-        if class_id == key:
-            return value
+        selectedBox = trackList[selectedIndex].meas['box']
+
+        selectedBoxCenter = (int((selectedBox[0] + selectedBox[2])/2),int((selectedBox[1] + selectedBox[3])/2))
+
+        searchBox = getSearchBox(selectedBoxCenter, kSearchBoxHalfWidth, kSearchBoxHalfHeight, orig_width, orig_height)
+
+        curBoxes, networkEndTime = labelImage.findBoxes(modelSmall, imageOrig, searchBox, constants.kDetectionThreshold)
+
+        #Draws a rectangle to show the search box area
+        cv2.rectangle(imageOrig, (int(searchBox[0]), int(searchBox[1])), (int(searchBox[2]), int(searchBox[3])), colors[9], thickness=1)
+
+        #Translate detections by upper left corner coords of search box
+        for i in range(curBoxes.shape[0]):
+            row = np.copy(curBoxes[i])
+            rowShift = np.array([searchBox[0], searchBox[1], searchBox[0], searchBox[1]])
+            curBoxes[i] += rowShift
+    else:
+        ser.write(("s" + "\n").encode())
+
 
 def getSearchBox(selectedBoxCenter, searchBoxHalfWidth, searchBoxHalfHeight, image_width, image_height):
     searchBoxCenter = (np.min((np.max((selectedBoxCenter[0], searchBoxHalfWidth)),  image_width - searchBoxHalfWidth)), \
@@ -52,6 +53,67 @@ def getSearchBox(selectedBoxCenter, searchBoxHalfWidth, searchBoxHalfHeight, ima
     searchBoxCenter[1] + searchBoxHalfHeight])
 
     return searchBox
+
+#Modifies tracklist
+def updateTracks(curBoxes,trackList):
+    #Copies bounding boxes from Track objects into np array
+    trackedBoxes = np.empty((len(trackList), 4))
+    for i in range(len(trackList)):
+        trackedBoxes[i, :] = trackList[i].meas['box']
+
+    #Uses linear optimization to match boxes from the previous frame with boxes in the current frame.
+    matches = intersection.matchBoxes(trackedBoxes,curBoxes)
+    #Draws the previous boxes
+    for i in range(trackedBoxes.shape[0]):
+        trackedBox = trackedBoxes[i]
+        color = (0, 0, 255) #Red tracked box if no match. Yellow if match
+        cv2.rectangle(imageOrig, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
+
+    for i in range(curBoxes.shape[0]):
+        curBox = curBoxes[i]
+        color = (255,0,0)#Blue if no match. Cyan if match.
+        cv2.rectangle(imageOrig, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
+
+    #Loop through all tracks, if there is a match update with match box, else update with None and check if it should be deleted
+    #Loop through all detections, if there is a match do nothing, else create new Track and append to tracklist
+
+    #Update loop
+    for i in range(len(trackList)):
+        if i in matches[0]:
+            curBoxMatchIndex = np.where(matches[0] == i)[0][0]
+            newMeas = {'captureTime': loopStartTime, 'box': curBoxes[curBoxMatchIndex]}
+            trackList[i].update(newMeas)
+        else:
+            trackList[i].update(None)
+    #Delete Loop
+    for i in range(len(trackList)-1,0-1, -1):
+        if trackList[i].timesUnseenConsecutive > constants.timesUnseenConsecutiveMax:
+            #print('POPPING TRACK: ', i)
+            trackList.pop(i)
+
+    for i in range(curBoxes.shape[0]):
+        if i not in matches[1]:
+            initMeas = {'captureTime': loopStartTime, 'box': curBoxes[i]}
+            trackList.append(Track(initMeas))
+
+def drawPrevPrediction():
+    for i in range(len(trackList)):
+        if not trackList[i].selected:
+            continue
+
+        targetSelected = True
+        selectedIndex = i
+        curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime + kalmanPredictionConst)
+
+        if curBoxCenter is None:
+            continue
+
+        cv2.circle(img = imageOrig, center = (int(prevPrediction), int(480)) , radius = 20 , color = (0, 0, 255), thickness = 4)
+        cv2.circle(img = imageOrig, center = (int(prevPrediction), int(480)) , radius = 1 , color = (0, 0, 255), thickness = 1)
+
+        #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+        #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 1 , color = (0, 255, 0), thickness = 1)
+        prevPrediction = curBoxCenter[0]
 
 colors = np.array([(255,0,0), (255,128,0), (255,255,0), (128,255,0), (0,255,0), (0,255,128), (0,255,255), (128,255), (0,0,255), (127,0,255), (255,0,255), (255,0,127)])
 #                   Red         Orange      Yellow     Yellow-Green   Green      Blue-Green     Cyan     Light-Blue     Blue    Violet          Magenta   Pink
@@ -112,177 +174,86 @@ kalmanPredictionConst = 0.3
 
 while(True):
     r, imageOrig = cap.read()
-    if r:
-        loopStartTime = time.time()
+    if not r:
+        continue
+    loopStartTime = time.time()
+    outOrig.write(imageOrig)
+    orig_height, orig_width, _ = imageOrig.shape
+    searchBox = None
+    curBoxes = None
+    networkEndTime = None
 
-        outOrig.write(imageOrig)
-
-        orig_height, orig_width, _ = imageOrig.shape
-
-        searchBox = None
-
-        curBoxes = None
-
-        networkEndTime = None
-
-        if selectedIndex is not None:
-            ser.write(("w" + "\n").encode())
-            temp = 1
-        else:
-            ser.write(("s" + "\n").encode())
-
-        """if selectedIndex is not None: #When a track is currently selected...
-
-            #ser.write(("w" + "\n").encode())
-
-            selectedBox = trackList[selectedIndex].meas['box']
-
-            selectedBoxCenter = (int((selectedBox[0] + selectedBox[2])/2),int((selectedBox[1] + selectedBox[3])/2))
-
-            searchBox = getSearchBox(selectedBoxCenter, kSearchBoxHalfWidth, kSearchBoxHalfHeight, orig_width, orig_height)
-
-            curBoxes, networkEndTime = labelImage.findBoxes(modelSmall, imageOrig, searchBox, constants.kDetectionThreshold)
-
-            #Draws a rectangle to show the search box area
-            cv2.rectangle(imageOrig, (int(searchBox[0]), int(searchBox[1])), (int(searchBox[2]), int(searchBox[3])), colors[9], thickness=1)
-
-            #Translate detections by upper left corner coords of search box
-            for i in range(curBoxes.shape[0]):
-                row = np.copy(curBoxes[i])
-                rowShift = np.array([searchBox[0], searchBox[1], searchBox[0], searchBox[1]])
-                curBoxes[i] += rowShift
-        else:
-            #ser.write(("s" + "\n").encode())"""
-        curBoxes, networkEndTime = labelImage.findBoxes(modelBig, imageOrig, searchBox, constants.kDetectionThreshold)
-
-        #Copies bounding boxes from Track objects into np array
-        trackedBoxes = np.empty((len(trackList), 4))
-        for i in range(len(trackList)):
-            trackedBoxes[i, :] = trackList[i].meas['box']
-
-        #Uses linear optimization to match boxes from the previous frame with boxes in the current frame.
-        matches = intersection.matchBoxes(trackedBoxes,curBoxes)
-        #Draws the previous boxes
-        for i in range(trackedBoxes.shape[0]):
-            trackedBox = trackedBoxes[i]
-            color = (0, 0, 255) #Red tracked box if no match. Yellow if match
-            cv2.rectangle(imageOrig, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
-
-
-        for i in range(curBoxes.shape[0]):
-            curBox = curBoxes[i]
-            color = (255,0,0)#Blue if no match. Cyan if match.
-            cv2.rectangle(imageOrig, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
-
-        #Loop through all tracks, if there is a match update with match box, else update with None and check if it should be deleted
-        #Loop through all detections, if there is a match do nothing, else create new Track and append to tracklist
-
-        #Update loop
-        for i in range(len(trackList)):
-            if i in matches[0]:
-                curBoxMatchIndex = np.where(matches[0] == i)[0][0]
-                newMeas = {'captureTime': loopStartTime, 'box': curBoxes[curBoxMatchIndex]}
-                trackList[i].update(newMeas)
-                #print("updating track:", i, newMeas)
-
-            else:
-                trackList[i].update(None)
-                #print("updating track:", i, "None")
-        #Delete Loop
-        for i in range(len(trackList)-1,0-1, -1):
-            if trackList[i].timesUnseenConsecutive > constants.timesUnseenConsecutiveMax:
-                #print('POPPING TRACK: ', i)
-                trackList.pop(i)
-
-        for i in range(curBoxes.shape[0]):
-            if i not in matches[1]:
-                initMeas = {'captureTime': loopStartTime, 'box': curBoxes[i]}
-                trackList.append(Track(initMeas))
-
-        #Checks if a target is selected
-        targetSelected = False
-
-        for i in range(len(trackList)):
-            if not trackList[i].selected:
-                continue
-
-            targetSelected = True
-            selectedIndex = i
-            curBoxCenter, guessCovariance = trackList[i].predict(networkEndTime + kalmanPredictionConst)
-
-            if curBoxCenter is None:
-                continue
-
-            cv2.circle(img = imageOrig, center = (int(prevPrediction), int(480)) , radius = 20 , color = (0, 0, 255), thickness = 4)
-            cv2.circle(img = imageOrig, center = (int(prevPrediction), int(480)) , radius = 1 , color = (0, 0, 255), thickness = 1)
-
-            #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
-            #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 1 , color = (0, 255, 0), thickness = 1)
-            prevPrediction = curBoxCenter[0]
-
-        #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
-        if not targetSelected:
-            selectedIndex = None
-            bestTrack = {'index': None, 'timesSeenTotal': None}
-            for i in range(len(trackList)):
-                if bestTrack['timesSeenTotal'] == None or trackList[i].timesSeenTotal > bestTrack['timesSeenTotal']:
-                    bestTrack = {'index': i, 'timesSeenTotal': trackList[i].timesSeenTotal}
-            #Select new target
-            if bestTrack['index'] != None and trackList[bestTrack['index']].filter is not None:
-                trackList[bestTrack['index']].selected = True
-                targetSelected = True
-
-        if selectedIndex != None:
-            selectedTrack = trackList[selectedIndex]
-
-            #Pickle Data dump
-            measurement = np.append(measurement, (selectedTrack.meas['box'][0] + selectedTrack.meas['box'][2])/2)
-            imageCaptureTimes = np.append(imageCaptureTimes, selectedTrack.meas['captureTime'])
-            filterState = np.vstack((filterState, selectedTrack.filter.prevStateMean))
-            filterCovariance = np.concatenate((filterCovariance, np.reshape(selectedTrack.filter.prevStateCovariance, (1,2,2)) ), axis = 0)
-            isSelected = np.append(isSelected, 1)
-
-
-            #selectedBox = selectedTrack.meas['box']
-            #curBoxCenter = (selectedBox[0] + selectedBox[2])/2
-
-            curState, _ = selectedTrack.predict(networkEndTime + kalmanPredictionConst)
-
-            curBoxCenter = curState[0]
-
-            points = np.array([curBoxCenter,540], dtype = np.float32)
-            points = np.reshape(points, (1,1,2))
-
-            undistCenter = cv2.undistortPoints(points, constants.K, constants.dist)[0,0,0]
-
-
-
-            cv2.circle(img = imageOrig, center = (int(curBoxCenter), int(orig_height/2)) , radius = 20 , color = (0, 255, 0), thickness = 4)
-            #servoTargetDeg = int(np.round(-180 / np.pi * np.arctan2( -(curBoxCenter - kImageWidthPx/2) / (kImageWidthPx / (2 * np.tan(kCameraFOVRads/2) ) ), 1)))
-            servoTargetDeg = np.arctan(undistCenter) * 180/np.pi
-            if(networkEndTime - prevFireTime > 1):
-                ser.write(("f" + "\n").encode())
-                prevFireTime = networkEndTime
-            writeServoPos(int(90+servoTargetDeg))
-            #print(int(90+servoTargetDeg))
-            print("curBoxCenter", curBoxCenter, "undistCenter", undistCenter, "servoTargetDeg",servoTargetDeg)
-
-
-
-        else:
-            measurement = np.append(measurement, 0)
-            imageCaptureTimes = np.append(imageCaptureTimes, loopStartTime)
-            filterState = np.vstack((filterState, np.array([0,0])))
-            filterCovariance = np.concatenate((filterCovariance, np.zeros((1,2,2))), axis = 0)
-            isSelected = np.append(isSelected,0)
-
-        #print('time:', networkEndTime - loopStartTime)
-        outLabeled.write(imageOrig)
-
-        cv2.imshow('image', cv2.resize(imageOrig, (1280,720))) #Resizing so image fits on screen
-
+    if selectedIndex is not None:
+        ser.write(("w" + "\n").encode())
+        temp = 1
     else:
-        break
+        ser.write(("s" + "\n").encode())
+    #runSearchBox()
+
+    curBoxes, networkEndTime = labelImage.findBoxes(modelBig, imageOrig, searchBox, constants.kDetectionThreshold)
+    updateTracks(curBoxes,trackList)
+
+    #Checks if a target is selected
+    targetSelected = False
+
+    drawPrevPrediction()
+
+    #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
+    if not targetSelected:
+        selectedIndex = None
+        bestTrack = {'index': None, 'timesSeenTotal': None}
+        for i in range(len(trackList)):
+            if bestTrack['timesSeenTotal'] == None or trackList[i].timesSeenTotal > bestTrack['timesSeenTotal']:
+                bestTrack = {'index': i, 'timesSeenTotal': trackList[i].timesSeenTotal}
+        #Select new target
+        if bestTrack['index'] != None and trackList[bestTrack['index']].filter is not None:
+            trackList[bestTrack['index']].selected = True
+            targetSelected = True
+
+    if selectedIndex != None:
+        selectedTrack = trackList[selectedIndex]
+
+        #Pickle Data dump
+        measurement = np.append(measurement, (selectedTrack.meas['box'][0] + selectedTrack.meas['box'][2])/2)
+        imageCaptureTimes = np.append(imageCaptureTimes, selectedTrack.meas['captureTime'])
+        filterState = np.vstack((filterState, selectedTrack.filter.prevStateMean))
+        filterCovariance = np.concatenate((filterCovariance, np.reshape(selectedTrack.filter.prevStateCovariance, (1,2,2)) ), axis = 0)
+        isSelected = np.append(isSelected, 1)
+
+
+        #selectedBox = selectedTrack.meas['box']
+        #curBoxCenter = (selectedBox[0] + selectedBox[2])/2
+
+        curState, _ = selectedTrack.predict(networkEndTime + kalmanPredictionConst)
+
+        curBoxCenter = curState[0]
+
+        points = np.array([curBoxCenter,540], dtype = np.float32)
+        points = np.reshape(points, (1,1,2))
+
+        undistCenter = cv2.undistortPoints(points, constants.K, constants.dist)[0,0,0]
+
+        cv2.circle(img = imageOrig, center = (int(curBoxCenter), int(orig_height/2)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+        #servoTargetDeg = int(np.round(-180 / np.pi * np.arctan2( -(curBoxCenter - kImageWidthPx/2) / (kImageWidthPx / (2 * np.tan(kCameraFOVRads/2) ) ), 1)))
+        servoTargetDeg = np.arctan(undistCenter) * 180/np.pi
+        if(networkEndTime - prevFireTime > 1):
+            ser.write(("f" + "\n").encode())
+            prevFireTime = networkEndTime
+        writeServoPos(int(90+servoTargetDeg))
+        #print(int(90+servoTargetDeg))
+        print("curBoxCenter", curBoxCenter, "undistCenter", undistCenter, "servoTargetDeg",servoTargetDeg)
+    else:
+        measurement = np.append(measurement, 0)
+        imageCaptureTimes = np.append(imageCaptureTimes, loopStartTime)
+        filterState = np.vstack((filterState, np.array([0,0])))
+        filterCovariance = np.concatenate((filterCovariance, np.zeros((1,2,2))), axis = 0)
+        isSelected = np.append(isSelected,0)
+
+    #print('time:', networkEndTime - loopStartTime)
+    outLabeled.write(imageOrig)
+
+    cv2.imshow('image', cv2.resize(imageOrig, (1280,720))) #Resizing so image fits on screen
+
     k = cv2.waitKey(1)
 
     if k == 0xFF & ord("q"):
