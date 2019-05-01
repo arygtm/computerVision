@@ -1,13 +1,21 @@
 import numpy as np
 
-K = np.array( \
-[[1.14208505e+03, 0.00000000e+00, 9.20922239e+02],
- [0.00000000e+00, 1.13887149e+03, 5.47672865e+02],
- [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
-
-dist = np.array([[ 9.37026914e-02, -2.31783142e-01, -1.32204865e-04,
-        -2.36560138e-04,  1.03637009e-01]])
+#Camera variables
+kImageWidthPx = 1920
+kCameraFOVRads = np.pi/2;
+K = array( \
+    [[1.15092002e+03, 0.00000000e+00, 9.20072938e+02], \
+    [0.00000000e+00, 1.14809747e+03, 5.47118233e+02], \
+    [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
+dist = array([[ 0.09859361, -0.24158572,  0.00042056, -0.00039583,  0.11073676]])
 
 timesUnseenConsecutiveMax = 5
 
 kDetectionThreshold = 0.43
+
+colors = np.array([(255,0,0), (255,128,0), (255,255,0), (128,255,0), (0,255,0), (0,255,128), (0,255,255), (128,255), (0,0,255), (127,0,255), (255,0,255), (255,0,127)])
+#                   Red         Orange      Yellow     Yellow-Green   Green      Blue-Green     Cyan     Light-Blue     Blue    Violet          Magenta   Pink
+
+kServoOffsetDeg = 25
+
+kalmanPredictionConst = 0.3
