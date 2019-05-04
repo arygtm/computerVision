@@ -60,7 +60,7 @@ def findBoxes(model,imageOrig, searchBox, detectionThreshold):
 
     else:
         image = imageOrig
-        model.setInput(cv2.dnn.blobFromImage(image, size=(800, 600), swapRB=True))
+        model.setInput(cv2.dnn.blobFromImage(image, size=(480, 320), swapRB=True))
     #gets dimensions of new image
     image_height, image_width, _ = image.shape
 

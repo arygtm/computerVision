@@ -19,7 +19,7 @@ import serial
 
 #takes in a servo position in degrees and writes it to the serial port where the Arduino will read it and then move the servo.
 def writeServoPos(spd):
-    ser.write((str(spd + kServoOffsetDeg) + "\n").encode())
+    ser.write((str(spd + constants.kServoOffsetDeg) + "\n").encode())
 
 def flywheelControl(selectedIndex):
     if selectedIndex is not None:
@@ -81,25 +81,26 @@ def updateTracksAndDraw(trackList, imageOrig, curBoxes, loopStartTime):
             initMeas = {'captureTime': loopStartTime, 'box': curBoxes[i]}
             trackList.append(Track(initMeas))
 
-def getSelectionAndPredict(trackList, imageOrig, image_height):
+def getSelectionAndPredict(trackList, imageOrig, image_height, prevPrediction):
     selectedIndex = None
     for i in range(len(trackList)):
         if not trackList[i].selected:
             continue
 
         selectedIndex = i
-        curBoxCenter, guessCovariance = trackList[i].predict(loopStartTime + kalmanPredictionConst)
+        curState, guessCovariance = trackList[i].predict(loopStartTime + constants.kalmanPredictionConst)
 
-        if curBoxCenter is None:
+        if curState is None:
             continue
 
         cv2.circle(img = imageOrig, center = (int(prevPrediction), int(image_height/2)) , radius = 20 , color = (0, 0, 255), thickness = 4)
         cv2.circle(img = imageOrig, center = (int(prevPrediction), int(image_height/2)) , radius = 1 , color = (0, 0, 255), thickness = 1)
 
-        #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
-        #cv2.circle(img = image, center = (int(curBoxCenter[0]), int(480)) , radius = 1 , color = (0, 255, 0), thickness = 1)
-        prevPrediction = curBoxCenter[0]
-        return selectedIndex
+        #cv2.circle(img = image, center = (int(curState[0]), int(480)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+        #cv2.circle(img = image, center = (int(curState[0]), int(480)) , radius = 1 , color = (0, 255, 0), thickness = 1)
+        #newPrevPrediction = curState[0]
+        return (selectedIndex, curState[0])
+    return(selectedIndex, prevPrediction)
 
 def selectTarget(trackList):
     bestTrack = {'index': None, 'timesSeenTotal': None}
@@ -110,17 +111,16 @@ def selectTarget(trackList):
     if bestTrack['index'] != None and trackList[bestTrack['index']].filter is not None:
         trackList[bestTrack['index']].selected = True
 
-def aimTurretAndDraw(selectedTrack):
-    curState, _ = selectedTrack.predict(loopStartTime + kalmanPredictionConst)
-    curBoxCenter = curState[0]
-    points = np.array([curBoxCenter,540], dtype = np.float32)
+def aimTurretAndDraw(targetXPixel):
+    servoPixelOffset = 5520/43 - targetXPixel*23/172
+    points = np.array([targetXPixel + servoPixelOffset, 540], dtype = np.float32)
     points = np.reshape(points, (1,1,2))
     undistCenter = cv2.undistortPoints(points, constants.K, constants.dist)[0,0,0]
-    cv2.circle(img = imageOrig, center = (int(curBoxCenter), int(orig_height/2)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+    cv2.circle(img = imageOrig, center = (int(targetXPixel), int(orig_height/2)) , radius = 20 , color = (0, 255, 0), thickness = 4)
 
     servoTargetDeg = np.arctan(undistCenter) * 180/np.pi
     writeServoPos(int(90+servoTargetDeg))
-    print("curBoxCenter", curBoxCenter, "undistCenter", undistCenter, "servoTargetDeg",servoTargetDeg)
+    print("targetXPixel", targetXPixel, "undistCenter", undistCenter, "servoTargetDeg",servoTargetDeg)
 
 #Model small is the searchBox model. ModelBig is the whole image model.
 modelSmall = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
@@ -166,13 +166,15 @@ while(True):
     curBoxes = None
     networkEndTime = None
 
-    flywheelControl()
+    flywheelControl(selectedIndex)
     #runSearchBox()
 
     curBoxes, networkEndTime = labelImage.findBoxes(modelBig, imageOrig, searchBox, constants.kDetectionThreshold)
     updateTracksAndDraw(trackList, imageOrig, curBoxes, loopStartTime)
 
-    selectedIndex = getSelectionAndPredict(trackList, imageOrig, image_height)
+    selectedIndex, _ = getSelectionAndPredict(trackList, imageOrig, orig_height, prevPrediction)
+
+    aimTurretAndDraw(960)
 
     #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
     if selectedIndex is None:
@@ -187,7 +189,9 @@ while(True):
         filterCovariance = np.concatenate((filterCovariance, np.reshape(selectedTrack.filter.prevStateCovariance, (1,2,2)) ), axis = 0)
         isSelected = np.append(isSelected, 1)
 
-        aimTurretAndDraw(selectedTrack)
+        curState, _ = selectedTrack.predict(loopStartTime + constants.kalmanPredictionConst)
+        #aimTurretAndDraw(curState[0])
+
 
         #fireTurret by pulsing the solenoid
         if(loopStartTime - prevFireTime > 1):
