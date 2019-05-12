@@ -18,8 +18,9 @@ import os
 import serial
 
 #takes in a servo position in degrees and writes it to the serial port where the Arduino will read it and then move the servo.
-def writeServoPos(spd):
-    ser.write((str(spd + constants.kServoOffsetDeg) + "\n").encode())
+def writeServoPos(servoPosDeg, servoVelDeg):
+    print(str(servoPosDeg) + " " + str(servoVelDeg))
+    ser.write((str(servoPosDeg - constants.kServoOffsetDeg) + " " + str(servoVelDeg) + "\n").encode())
 
 def flywheelControl(selectedIndex):
     if selectedIndex is not None:
@@ -110,23 +111,34 @@ def selectTarget(trackList):
     #Select new target
     if bestTrack['index'] != None and trackList[bestTrack['index']].filter is not None:
         trackList[bestTrack['index']].selected = True
-
-def aimTurretAndDraw(targetXPixel):
-    servoPixelOffset = 5520/43 - targetXPixel*23/172
-    points = np.array([targetXPixel + servoPixelOffset, 540], dtype = np.float32)
+#0 degrees is center angle increases to the right
+def pixToDeg(targetXPix):
+    servoPixelOffset = 1920/43 - targetXPix*2/43
+    servoPixelOffset = 0
+    points = np.array([targetXPix + servoPixelOffset, 540], dtype = np.float32)
     points = np.reshape(points, (1,1,2))
     undistCenter = cv2.undistortPoints(points, constants.K, constants.dist)[0,0,0]
-    cv2.circle(img = imageOrig, center = (int(targetXPixel), int(orig_height/2)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+    return np.arctan(undistCenter) * 180/np.pi
 
-    servoTargetDeg = np.arctan(undistCenter) * 180/np.pi
-    writeServoPos(int(90+servoTargetDeg))
-    print("targetXPixel", targetXPixel, "undistCenter", undistCenter, "servoTargetDeg",servoTargetDeg)
+pixToDegH = 1e-2
+
+def aimTurretAndDraw(targetXPix, targetXVelPix):
+    targetAngleDeg = pixToDeg(targetXPix)
+    targetVelDeg = (pixToDeg(targetXPix + pixToDegH) - targetAngleDeg)/pixToDegH * targetXVelPix
+    print(targetXPix, targetXVelPix)
+    #print(pixToDeg(targetXPix + pixToDegH), targetAngleDeg, targetVelDeg)
+    cv2.circle(img = imageOrig, center = (int(targetXPix), int(orig_height/2)) , radius = 20 , color = (0, 255, 0), thickness = 4)
+    writeServoPos(int(90-targetAngleDeg), int(-targetVelDeg))
 
 #Model small is the searchBox model. ModelBig is the whole image model.
 modelSmall = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
 modelBig = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
 #Starts the camera
-cap = cv2.VideoCapture(0)
+#cap = cv2.VideoCapture(0)
+
+#Run on a pre-recorded video
+cap = cv2.VideoCapture('/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTestFiles/Test11/autoTurretOutOrig.avi')
+
 #Starts a videowriter
 outLabeled = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutLabeled.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
 outOrig = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutOrig.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
@@ -151,7 +163,7 @@ selectedIndex = None
 startTime = time.time()
 
 #Starts the servo in the center
-writeServoPos(90)
+writeServoPos(90, 0)
 
 prevFireTime = time.time()
 
@@ -174,7 +186,8 @@ while(True):
 
     selectedIndex, _ = getSelectionAndPredict(trackList, imageOrig, orig_height, prevPrediction)
 
-    aimTurretAndDraw(960)
+    #aimTurretAndDraw(960, 0)#TODO: remove. Only used for testing.
+
 
     #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
     if selectedIndex is None:
@@ -182,15 +195,16 @@ while(True):
     else:
         selectedTrack = trackList[selectedIndex]
 
-        #Pickle Data dump
-        measurement = np.append(measurement, (selectedTrack.meas['box'][0] + selectedTrack.meas['box'][2])/2)
-        imageCaptureTimes = np.append(imageCaptureTimes, selectedTrack.meas['captureTime'])
-        filterState = np.vstack((filterState, selectedTrack.filter.prevStateMean))
-        filterCovariance = np.concatenate((filterCovariance, np.reshape(selectedTrack.filter.prevStateCovariance, (1,2,2)) ), axis = 0)
-        isSelected = np.append(isSelected, 1)
+        #Pickle Data dump only if there is a current detection:
+        if curBoxes.shape[0] > 0:
+            measurement = np.append(measurement, (selectedTrack.meas['box'][0] + selectedTrack.meas['box'][2])/2)
+            imageCaptureTimes = np.append(imageCaptureTimes, selectedTrack.meas['captureTime'])
+            filterState = np.vstack((filterState, selectedTrack.filter.prevStateMean))
+            filterCovariance = np.concatenate((filterCovariance, np.reshape(selectedTrack.filter.prevStateCovariance, (1,2,2)) ), axis = 0)
+            isSelected = np.append(isSelected, 1)
 
         curState, _ = selectedTrack.predict(loopStartTime + constants.kalmanPredictionConst)
-        #aimTurretAndDraw(curState[0])
+        aimTurretAndDraw(curState[0], 1*curState[1])
 
 
         #fireTurret by pulsing the solenoid

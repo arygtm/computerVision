@@ -16,6 +16,6 @@ kDetectionThreshold = 0.43
 colors = np.array([(255,0,0), (255,128,0), (255,255,0), (128,255,0), (0,255,0), (0,255,128), (0,255,255), (128,255), (0,0,255), (127,0,255), (255,0,255), (255,0,127)])
 #                   Red         Orange      Yellow     Yellow-Green   Green      Blue-Green     Cyan     Light-Blue     Blue    Violet          Magenta   Pink
 
-kServoOffsetDeg = 21
+kServoOffsetDeg = 7
 
-kalmanPredictionConst = 0.3
+kalmanPredictionConst = 0.8

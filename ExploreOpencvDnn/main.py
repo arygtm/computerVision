@@ -181,7 +181,7 @@ def labelVideo(frameSkip,movieIn,movieOut):
                 curBox = curBoxes[i]
                 color = (255,0,0)#Blue if no match. Cyan if match.
                 cv2.rectangle(imageOrig, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
-
+                print(curBox)
             #Loop through all tracks, if there is a match update with match box, else update with None and check if it should be deleted
             #Loop through all detections, if there is a match do nothing, else create new Track and append to tracklist
 
@@ -285,13 +285,13 @@ def labelVideo(frameSkip,movieIn,movieOut):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-for file in os.listdir(movieDir):
+"""for file in os.listdir(movieDir):
     if(file[-3:] == "mov"):
         print(file[0:-4])
         video = os.path.join(movieDir,file)
         movieOutName = movieDir+'Labeled/MobileNet-SSD-v2/' + file[0:-4] + 'Labeled.avi'
-        labelVideo(6,video,movieOutName)
+        labelVideo(6,video,movieOutName)"""
 
-#labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
+labelVideo(1,"/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTestFiles/Test6/autoTurretOutOrig.avi",movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
 #labelVideo(model0,kDetectionThreshold,5,movieDir+'AryaRunning.mov',movieDir+'Labeled/MobileNet-SSDLite-v2/AryaRunningLabeled.avi')
 #labelVideo(model0,kDetectionThreshold,5,'/Users/arygout/Documents/aaStuff/computerVision/AryaWalking.mov','/Users/arygout/Documents/aaStuff/computerVision/AryaWalkingLabeled.avi')

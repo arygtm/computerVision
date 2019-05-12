@@ -42,6 +42,16 @@ def intersectionOverUnion(boxA,boxB):
     Areas = (boxes[:,2] - boxes[:,0]) * (boxes[:,3] - boxes[:,1])
     return Areas[2] / (Areas[0] + Areas[1] - Areas[2])
 
+#Scales a bounding box (x1,y1,x2,y2) about the CENTER of the box using some scale factor
+def scaleBox(box,scaleFactor):
+    boxCenter = (box[0]+box[2])/2 + (box[1]+box[3])/2
+    return (box - np.tile(boxCenter, (1,2))) * scaleFactor + np.tile(boxCenter, (1,2))
+
+def scaleBoxes(boxes,scaleFactor):
+    for box in boxes:
+        box = scaleBox(box,scaleFactor)
+    return boxes
+
 #Takes in a vector of trackedBoxes and a vector of curBoxes and matches tracked boxes with curBoxes based on the
 #intersection over union. Does this by computing an intersectino over union matrix and optimizing matches using linear_sum_assignment
 #If there are no boxes then empty arrays are returned
