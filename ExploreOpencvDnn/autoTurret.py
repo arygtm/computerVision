@@ -20,7 +20,7 @@ import serial
 #takes in a servo position in degrees and writes it to the serial port where the Arduino will read it and then move the servo.
 def writeServoPos(servoPosDeg, servoVelDeg):
     print(str(servoPosDeg) + " " + str(servoVelDeg))
-    ser.write((str(servoPosDeg - constants.kServoOffsetDeg) + " " + str(servoVelDeg) + "\n").encode())
+    ser.write((str(servoPosDeg) + " " + str(servoVelDeg) + "\n").encode())
 
 def flywheelControl(selectedIndex):
     if selectedIndex is not None:
@@ -128,16 +128,16 @@ def aimTurretAndDraw(targetXPix, targetXVelPix):
     print(targetXPix, targetXVelPix)
     #print(pixToDeg(targetXPix + pixToDegH), targetAngleDeg, targetVelDeg)
     cv2.circle(img = imageOrig, center = (int(targetXPix), int(orig_height/2)) , radius = 20 , color = (0, 255, 0), thickness = 4)
-    writeServoPos(int(90-targetAngleDeg), int(-targetVelDeg))
+    writeServoPos(int((90 - targetAngleDeg - constants.kServoOffsetDeg) * 100), int(-targetVelDeg * 100))
 
 #Model small is the searchBox model. ModelBig is the whole image model.
 modelSmall = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
 modelBig = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
 #Starts the camera
-#cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0)
 
 #Run on a pre-recorded video
-cap = cv2.VideoCapture('/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTestFiles/Test11/autoTurretOutOrig.avi')
+#cap = cv2.VideoCapture('/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTestFiles/Test11/autoTurretOutOrig.avi')
 
 #Starts a videowriter
 outLabeled = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutLabeled.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
@@ -166,6 +166,8 @@ startTime = time.time()
 writeServoPos(90, 0)
 
 prevFireTime = time.time()
+
+kAngleScaleFactor = 100.0
 
 while(True):
     r, imageOrig = cap.read()

@@ -45,9 +45,9 @@ long long prevPrintTimeMs = 0;
 
 int prevTurretPos = 90;
 
-int turretPos = 90;
+float turretPos = 90;
 
-int turretVel = 0;
+float turretVel = 0;
 
 const int lashDeg = 20;
 
@@ -57,14 +57,15 @@ bool shouldSpinDown = false;
 
 long long spinTimerStart = 0;
 
-
-long long prevServoWriteTimeMs_ = 0;
+ long long prevServoWriteTimeMs_ = 0;
 
 long long prevMsgReceiveMs_ = 0;
 
-void writeServo(int servoPos, int servoVel){
+const float angleScaleFactor_ = 100.0;
+
+void writeServo(float servoPos, float servoVel){
   long long curTimeMs = millis();
-  if( curTimeMs - prevServoWriteTimeMs_ > 20 && curTimeMs - prevMsgReceiveMs_ < 300){
+  if( curTimeMs - prevServoWriteTimeMs_ > 20 && curTimeMs - prevMsgReceiveMs_ < 500){
     float targetAngle = (servoPos + servoVel * (curTimeMs - prevMsgReceiveMs_)/1000.0) * 599.0/60.0 + 600.0;
     
     turret.writeMicroseconds(targetAngle);
@@ -96,15 +97,15 @@ void loop() {
       Serial.print(inString);
       
       Serial.print(". StringPos: ");
-      turretPos = inString.substring(0,spaceIndex).toInt();
+      turretPos = inString.substring(0,spaceIndex).toFloat()/angleScaleFactor_;
       Serial.print(inString.substring(0,spaceIndex));
       
       Serial.print(". String Vel: ");
       if(inString.indexOf('-') == -1){
-        turretVel = inString.substring(spaceIndex + 1).toInt();
+        turretVel = inString.substring(spaceIndex + 1).toFloat()/angleScaleFactor_;
       Serial.print(inString.substring(spaceIndex + 1));
       } else {
-        turretVel = inString.substring(spaceIndex + 1).toInt();
+        turretVel = inString.substring(spaceIndex + 1).toFloat()/angleScaleFactor_;
       }
 
       Serial.print(". TurretPos:  ");
