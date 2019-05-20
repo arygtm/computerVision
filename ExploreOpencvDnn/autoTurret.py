@@ -19,13 +19,15 @@ import serial
 
 #takes in a servo position in degrees and writes it to the serial port where the Arduino will read it and then move the servo.
 def writeServoPos(servoPosDeg, servoVelDeg):
-    print(str(servoPosDeg) + " " + str(servoVelDeg))
-    ser.write((str(servoPosDeg) + " " + str(servoVelDeg) + "\n").encode())
+    #print(str(servoPosDeg) + " " + str(servoVelDeg))
+    if ser is not None:
+        ser.write((str(servoPosDeg) + " " + str(servoVelDeg) + "\n").encode())
 
 def flywheelControl(selectedIndex):
+    if ser is None:
+        return
     if selectedIndex is not None:
         ser.write(("w" + "\n").encode())
-        temp = 1
     else:
         ser.write(("s" + "\n").encode())
 
@@ -40,6 +42,11 @@ def getSearchBox(selectedBoxCenter, searchBoxHalfWidth, searchBoxHalfHeight, ima
 
     return searchBox
 
+def drawBoxes(boxes, imageOrig, color, thickness = 4):
+    for i in range(boxes.shape[0]):
+        curBox = boxes[i, :]
+        cv2.rectangle(imageOrig, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness = thickness)
+
 #Modifies tracklist
 def updateTracksAndDraw(trackList, imageOrig, curBoxes, loopStartTime):
     #Copies bounding boxes from Track objects into np array
@@ -50,15 +57,23 @@ def updateTracksAndDraw(trackList, imageOrig, curBoxes, loopStartTime):
     #Uses linear optimization to match boxes from the previous frame with boxes in the current frame.
     matches = intersection.matchBoxes(trackedBoxes,curBoxes)
     #Draws the previous boxes
-    for i in range(trackedBoxes.shape[0]):
-        trackedBox = trackedBoxes[i]
-        color = constants.colors[-4]
-        cv2.rectangle(imageOrig, (int(trackedBox[0]), int(trackedBox[1])), (int(trackedBox[2]), int(trackedBox[3])), color, thickness=1)
 
-    for i in range(curBoxes.shape[0]):
-        curBox = curBoxes[i]
-        color = constants.colors[0]
-        cv2.rectangle(imageOrig, (int(curBox[0]), int(curBox[1])), (int(curBox[2]), int(curBox[3])), color, thickness=4)
+    drawBoxes(trackedBoxes, imageOrig, (0,0,255))
+
+    drawBoxes(curBoxes, imageOrig, (255,0,0))
+
+    font                   = cv2.FONT_HERSHEY_SIMPLEX
+    bottomLeftCornerOfText = (10,40)
+    fontScale              = 1
+    fontColor              = (255,255,255)
+    lineType               = 2
+
+    cv2.putText(imageOrig,str(frameNumber),
+        bottomLeftCornerOfText,
+        font,
+        fontScale,
+        fontColor,
+        lineType)
 
     #Loop through all tracks, if there is a match update with match box, else update with None and check if it should be deleted
     #Loop through all detections, if there is a match do nothing, else create new Track and append to tracklist
@@ -133,17 +148,24 @@ def aimTurretAndDraw(targetXPix, targetXVelPix):
 #Model small is the searchBox model. ModelBig is the whole image model.
 modelSmall = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
 modelBig = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
-#Starts the camera
-cap = cv2.VideoCapture(0)
+
+
+inputSource = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTestFiles/Test14/autoTurretOutOrig.avi'
+#inputSource = 0
 
 #Run on a pre-recorded video
-#cap = cv2.VideoCapture('/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTestFiles/Test11/autoTurretOutOrig.avi')
+cap = cv2.VideoCapture(inputSource)
+
+#cap = cv2.VideoCapture('/Users/arygout/Documents/aaStuff/BenchmarkVideos/C930e/Labeled/MobileNet-SSD-v2/')
 
 #Starts a videowriter
 outLabeled = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutLabeled.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
 outOrig = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutOrig.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
 
-ser = serial.Serial('/dev/cu.usbmodem14111')#Set this to the actual serial port name
+if inputSource == 0:
+    ser = serial.Serial('/dev/cu.usbmodem14111')#Set this to the actual serial port name
+else:
+    ser = None
 
 #Variables to store detections
 trackList = []
@@ -169,7 +191,12 @@ prevFireTime = time.time()
 
 kAngleScaleFactor = 100.0
 
+frameNumber = 0
+
 while(True):
+
+    frameNumber += 1
+
     r, imageOrig = cap.read()
     if not r:
         continue
@@ -183,7 +210,19 @@ while(True):
     flywheelControl(selectedIndex)
     #runSearchBox()
 
-    curBoxes, networkEndTime = labelImage.findBoxes(modelBig, imageOrig, searchBox, constants.kDetectionThreshold)
+    allCurBoxes, allProbs, networkEndTime = labelImage.findBoxes(modelBig, imageOrig, searchBox, constants.kDetectionThreshold)
+
+    drawBoxes(allCurBoxes, imageOrig, (0,255,0), 8)
+
+    #Does non maxima suppression on all network detections
+    print(allCurBoxes.shape)
+    print(allCurBoxes)
+    if frameNumber == 9:
+        pdb.set_trace()
+
+    curBoxes = aryaNms.non_max_suppression(allCurBoxes, allProbs)
+    print(curBoxes.shape)
+
     updateTracksAndDraw(trackList, imageOrig, curBoxes, loopStartTime)
 
     selectedIndex, _ = getSelectionAndPredict(trackList, imageOrig, orig_height, prevPrediction)
@@ -211,7 +250,8 @@ while(True):
 
         #fireTurret by pulsing the solenoid
         if(loopStartTime - prevFireTime > 1):
-            ser.write(("f" + "\n").encode())
+            if ser is not None:
+                ser.write(("f" + "\n").encode())
             prevFireTime = loopStartTime
 
     #print('time:', networkEndTime - loopStartTime)
@@ -220,11 +260,14 @@ while(True):
 
     k = cv2.waitKey(1)
     if k == 0xFF & ord("q"):
-        ser.write(("s" + "\n").encode())
+        if ser is not None:
+            ser.write(("s" + "\n").encode())
         break
     elif k == 0xFF & ord("p"):
-        ser.write(("s" + "\n").encode())
+        if ser is not None:
+            ser.write(("s" + "\n").encode())
         pdb.set_trace()
+
 
 dictionary = {
     'measurement': measurement,
@@ -234,10 +277,11 @@ dictionary = {
     'isSelected': isSelected
     }
 
-pickleDir = '/Users/arygout/Documents/aaStuff/computerVision/'
+pickleDir = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/TrackerLabeled/'
 
 pickle.dump(dictionary, open('videoDump.pkl', 'wb'))
-ser.write(("s" + "\n").encode())
+if ser is not None:
+    ser.write(("s" + "\n").encode())
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
@@ -280,4 +324,5 @@ def runSearchBox():
             rowShift = np.array([searchBox[0], searchBox[1], searchBox[0], searchBox[1]])
             curBoxes[i] += rowShift
     else:
-        ser.write(("s" + "\n").encode())
+        #ser.write(("s" + "\n").encode())
+        temp = 3

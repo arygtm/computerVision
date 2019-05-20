@@ -60,7 +60,7 @@ def findBoxes(model,imageOrig, searchBox, detectionThreshold):
 
     else:
         image = imageOrig
-        model.setInput(cv2.dnn.blobFromImage(image, size=(480, 320), swapRB=True))
+        model.setInput(cv2.dnn.blobFromImage(image, size=(240, 160), swapRB=True)) #TODO change back to 480 x 320
     #gets dimensions of new image
     image_height, image_width, _ = image.shape
 
@@ -90,10 +90,7 @@ def findBoxes(model,imageOrig, searchBox, detectionThreshold):
             allCurBoxes = np.vstack((allCurBoxes, [int(box_x), int(box_y), int(box_width), int(box_height)]))
             allProbs = np.vstack((allProbs, confidence))
 
-    #Does non maxima suppression on all network detections
-    curBoxes, curProbs = aryaNms.non_max_suppression(allCurBoxes, allProbs)
-
-    return curBoxes, networkEndTime
+    return allCurBoxes,allProbs, networkEndTime
 
 movieDir = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/C930e/'
 

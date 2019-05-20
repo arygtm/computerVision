@@ -4,7 +4,7 @@ String inString = "";    // string to hold input
 
 #define flywheelPin 11
 
-#define solenoidPin 10
+#define rollerPin 10
  
 #define fanPin 6
 
@@ -17,10 +17,10 @@ Servo turret;
 void setup() {
 
   pinMode(flywheelPin, OUTPUT);
-  pinMode(solenoidPin, OUTPUT);
+  pinMode(rollerPin, OUTPUT);
   
   digitalWrite(flywheelPin, LOW);
-  digitalWrite(solenoidPin, LOW);
+  digitalWrite(rollerPin, LOW);
 
   fan.attach(fanPin);
   fan.write(770);
@@ -69,11 +69,11 @@ void writeServo(float servoPos, float servoVel){
     float targetAngle = (servoPos + servoVel * (curTimeMs - prevMsgReceiveMs_)/1000.0) * 599.0/60.0 + 600.0;
     
     turret.writeMicroseconds(targetAngle);
-    Serial.print(turretPos);
+    /*Serial.print(turretPos);
     Serial.print(" ");
     Serial.print(turretVel);
     Serial.print(" ");
-    Serial.println(targetAngle);
+    Serial.println(targetAngle);*/
     //Serial.println(targetAngle);
     prevServoWriteTimeMs_ = curTimeMs;
   }
@@ -120,20 +120,20 @@ void loop() {
       // convert the incoming byte to a char and add it to the string:
       inString += (char)inChar;
     } else if(inChar == 'w') {
-      //digitalWrite(flywheelPin, HIGH);
+      analogWrite(flywheelPin, 50);
       fan.write(2100);
       //Serial.println("spinningUp");
       spinning = true;
       shouldSpinDown = true;
     } else if(inChar == 's'){
       spinning = false;
-      digitalWrite(flywheelPin, LOW);
+      analogWrite(flywheelPin, 0);
       fan.write(770);
       //Serial.println("spinningDown");
     } else if(inChar == 'f'){
-      digitalWrite(solenoidPin, HIGH);
-      delay(90);
-      digitalWrite(solenoidPin, LOW);
+      digitalWrite(rollerPin, HIGH);
+      delay(90);//TODO: Make this 90
+      digitalWrite(rollerPin, LOW);
       //Serial.println("firing");
     } 
       
