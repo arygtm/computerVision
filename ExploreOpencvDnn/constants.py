@@ -11,11 +11,13 @@ dist = np.array([[ 0.09859361, -0.24158572,  0.00042056, -0.00039583,  0.1107367
 
 timesUnseenConsecutiveMax = 5
 
-kDetectionThreshold = 0.43
+kDetectionThreshold = 0.6
 
 colors = np.array([(255,0,0), (255,128,0), (255,255,0), (128,255,0), (0,255,0), (0,255,128), (0,255,255), (128,255), (0,0,255), (127,0,255), (255,0,255), (255,0,127)])
 #                   Red         Orange      Yellow     Yellow-Green   Green      Blue-Green     Cyan     Light-Blue     Blue    Violet          Magenta   Pink
 
-kServoOffsetDeg = 7
+kServoOffsetDeg = 30
 
 kalmanPredictionConst = 0.8
+
+kRateOfFire = 1 #Rounds per second

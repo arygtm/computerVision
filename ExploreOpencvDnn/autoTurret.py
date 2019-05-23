@@ -156,14 +156,12 @@ inputSource = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTest
 #Run on a pre-recorded video
 cap = cv2.VideoCapture(inputSource)
 
-#cap = cv2.VideoCapture('/Users/arygout/Documents/aaStuff/BenchmarkVideos/C930e/Labeled/MobileNet-SSD-v2/')
-
 #Starts a videowriter
 outLabeled = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutLabeled.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
 outOrig = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutOrig.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
 
 if inputSource == 0:
-    ser = serial.Serial('/dev/cu.usbmodem14111')#Set this to the actual serial port name
+    ser = serial.Serial('/dev/cu.usbmodem56')#Set this to the actual serial port name
 else:
     ser = None
 
@@ -215,19 +213,20 @@ while(True):
     drawBoxes(allCurBoxes, imageOrig, (0,255,0), 8)
 
     #Does non maxima suppression on all network detections
-    print(allCurBoxes.shape)
-    print(allCurBoxes)
-    if frameNumber == 9:
-        pdb.set_trace()
+    #print(allCurBoxes.shape)
+    #print(allCurBoxes)
+    #if inputSource != 0:
+    #    if frameNumber == 9:
+    #        pdb.set_trace()
 
     curBoxes = aryaNms.non_max_suppression(allCurBoxes, allProbs)
-    print(curBoxes.shape)
+    #print(curBoxes.shape)
 
     updateTracksAndDraw(trackList, imageOrig, curBoxes, loopStartTime)
 
     selectedIndex, _ = getSelectionAndPredict(trackList, imageOrig, orig_height, prevPrediction)
 
-    #aimTurretAndDraw(960, 0)#TODO: remove. Only used for testing.
+    #aimTurretAndDraw(960, 0)#TODO: remove. Only used for calibration.
 
 
     #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
@@ -249,9 +248,10 @@ while(True):
 
 
         #fireTurret by pulsing the solenoid
-        if(loopStartTime - prevFireTime > 1):
+        if(loopStartTime - prevFireTime > 1/constants.kRateOfFire):
             if ser is not None:
                 ser.write(("f" + "\n").encode())
+                temp = 1
             prevFireTime = loopStartTime
 
     #print('time:', networkEndTime - loopStartTime)

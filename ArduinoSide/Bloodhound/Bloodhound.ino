@@ -65,15 +65,15 @@ const float angleScaleFactor_ = 100.0;
 
 void writeServo(float servoPos, float servoVel){
   long long curTimeMs = millis();
-  if( curTimeMs - prevServoWriteTimeMs_ > 20 && curTimeMs - prevMsgReceiveMs_ < 500){
+  if( curTimeMs - prevServoWriteTimeMs_ > 20 && curTimeMs - prevMsgReceiveMs_ < 10000){
     float targetAngle = (servoPos + servoVel * (curTimeMs - prevMsgReceiveMs_)/1000.0) * 599.0/60.0 + 600.0;
     
     turret.writeMicroseconds(targetAngle);
-    /*Serial.print(turretPos);
+    Serial.print(turretPos);
     Serial.print(" ");
     Serial.print(turretVel);
     Serial.print(" ");
-    Serial.println(targetAngle);*/
+    Serial.println(targetAngle);
     //Serial.println(targetAngle);
     prevServoWriteTimeMs_ = curTimeMs;
   }
@@ -96,22 +96,22 @@ void loop() {
       }
       Serial.print(inString);
       
-      Serial.print(". StringPos: ");
+      //Serial.print(". StringPos: ");
       turretPos = inString.substring(0,spaceIndex).toFloat()/angleScaleFactor_;
-      Serial.print(inString.substring(0,spaceIndex));
+      //Serial.print(inString.substring(0,spaceIndex));
       
-      Serial.print(". String Vel: ");
+    //  Serial.print(". String Vel: ");
       if(inString.indexOf('-') == -1){
         turretVel = inString.substring(spaceIndex + 1).toFloat()/angleScaleFactor_;
-      Serial.print(inString.substring(spaceIndex + 1));
+     // Serial.print(inString.substring(spaceIndex + 1));
       } else {
         turretVel = inString.substring(spaceIndex + 1).toFloat()/angleScaleFactor_;
       }
 
-      Serial.print(". TurretPos:  ");
+     /* Serial.print(". TurretPos:  ");
       Serial.print(turretPos);
       Serial.print(". TurretVel: ");
-      Serial.println(turretVel);
+      Serial.println(turretVel);*/
       
       inString = "";
       prevMsgReceiveMs_ = curTimeMs;
@@ -120,9 +120,9 @@ void loop() {
       // convert the incoming byte to a char and add it to the string:
       inString += (char)inChar;
     } else if(inChar == 'w') {
-      analogWrite(flywheelPin, 50);
-      fan.write(2100);
-      //Serial.println("spinningUp");
+     analogWrite(flywheelPin, 255);
+      fan.write(1600);
+      Serial.println("spinningUp");
       spinning = true;
       shouldSpinDown = true;
     } else if(inChar == 's'){
@@ -132,7 +132,7 @@ void loop() {
       //Serial.println("spinningDown");
     } else if(inChar == 'f'){
       digitalWrite(rollerPin, HIGH);
-      delay(90);//TODO: Make this 90
+      delay(150);//TODO: Make this 90
       digitalWrite(rollerPin, LOW);
       //Serial.println("firing");
     } 

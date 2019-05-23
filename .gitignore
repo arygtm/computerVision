@@ -4,3 +4,4 @@
 ExploreOpencvDnn/models/
 pbtxt/
 *.pkl
+iPython/.ipynb*
