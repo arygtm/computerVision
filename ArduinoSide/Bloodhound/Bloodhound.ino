@@ -1,6 +1,6 @@
 #include <Servo.h>
 
-String inString = "";    // string to hold input
+
 
 #define flywheelPin 11
 
@@ -25,8 +25,6 @@ void setup() {
   fan.attach(fanPin);
   fan.write(770);
   delay(2000);
-
-  
   
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
@@ -41,23 +39,15 @@ void setup() {
   turret.write(90);
 }
 
-long long prevPrintTimeMs = 0;
+String inString = "";    // string to hold input
 
-int prevTurretPos = 90;
+long long prevPrintTimeMs = 0;
 
 float turretPos = 90;
 
 float turretVel = 0;
 
-const int lashDeg = 20;
-
-bool spinning = false;
-
-bool shouldSpinDown = false;
-
-long long spinTimerStart = 0;
-
- long long prevServoWriteTimeMs_ = 0;
+long long prevServoWriteTimeMs_ = 0;
 
 long long prevMsgReceiveMs_ = 0;
 
@@ -65,7 +55,7 @@ const float angleScaleFactor_ = 100.0;
 
 void writeServo(float servoPos, float servoVel){
   long long curTimeMs = millis();
-  if( curTimeMs - prevServoWriteTimeMs_ > 20 && curTimeMs - prevMsgReceiveMs_ < 10000){
+  if( curTimeMs - prevServoWriteTimeMs_ > 20 && curTimeMs - prevMsgReceiveMs_ < 2000){
     float targetAngle = (servoPos + servoVel * (curTimeMs - prevMsgReceiveMs_)/1000.0) * 599.0/60.0 + 600.0;
     
     turret.writeMicroseconds(targetAngle);
@@ -86,7 +76,7 @@ void loop() {
     
     int inChar = Serial.read();
     
-    if (inChar == '\n'&& inString != "") {
+    if (inChar == '\n') {
       int spaceIndex = inString.indexOf(' ');
 
       if(spaceIndex == -1){
@@ -123,19 +113,15 @@ void loop() {
      analogWrite(flywheelPin, 255);
       fan.write(1600);
       Serial.println("spinningUp");
-      spinning = true;
-      shouldSpinDown = true;
     } else if(inChar == 's'){
-      spinning = false;
       analogWrite(flywheelPin, 0);
       fan.write(770);
       //Serial.println("spinningDown");
     } else if(inChar == 'f'){
       digitalWrite(rollerPin, HIGH);
-      delay(150);//TODO: Make this 90
+    } else if(inChar == 'g'){
       digitalWrite(rollerPin, LOW);
-      //Serial.println("firing");
-    } 
+    }
       
   }
 

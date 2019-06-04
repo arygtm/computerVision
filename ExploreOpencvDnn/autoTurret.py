@@ -23,13 +23,27 @@ def writeServoPos(servoPosDeg, servoVelDeg):
     if ser is not None:
         ser.write((str(servoPosDeg) + " " + str(servoVelDeg) + "\n").encode())
 
-def flywheelControl(selectedIndex):
+def blasterControl(selectedIndex):
     if ser is None:
         return
     if selectedIndex is not None:
-        ser.write(("w" + "\n").encode())
+        wheelsOn()
+        startFiring()
     else:
-        ser.write(("s" + "\n").encode())
+        wheelsOff()
+        stopFiring()
+
+def wheelsOn():
+    ser.write(("w" + "\n").encode())
+
+def wheelsOff():
+    ser.write(("s" + "\n").encode())
+
+def startFiring():
+    ser.write(("f" + "\n").encode())
+
+def stopFiring():
+    ser.write(("g" + "\n").encode())
 
 def getSearchBox(selectedBoxCenter, searchBoxHalfWidth, searchBoxHalfHeight, image_width, image_height):
     searchBoxCenter = (np.min((np.max((selectedBoxCenter[0], searchBoxHalfWidth)),  image_width - searchBoxHalfWidth)), \
@@ -150,7 +164,7 @@ modelSmall = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_i
 modelBig = cv2.dnn.readNetFromTensorflow('models/MobileNet-SSDLite-v2/frozen_inference_graph.pb','models/MobileNet-SSDLite-v2/ssdlite_mobilenet_v2_coco.pbtxt')
 
 
-inputSource = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTestFiles/Test14/autoTurretOutOrig.avi'
+inputSource = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/KalmanFilterTestFiles/Test17/autoTurretOutOrig.avi'
 #inputSource = 0
 
 #Run on a pre-recorded video
@@ -161,7 +175,7 @@ outLabeled = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOut
 outOrig = cv2.VideoWriter("../../BenchmarkVideos/TrackerLabeled/autoTurretOutOrig.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 1, (1920,1080))
 
 if inputSource == 0:
-    ser = serial.Serial('/dev/cu.usbmodem56')#Set this to the actual serial port name
+    ser = serial.Serial('/dev/cu.usbmodem14311')#Set this to the actual serial port name
 else:
     ser = None
 
@@ -205,29 +219,20 @@ while(True):
     curBoxes = None
     networkEndTime = None
 
-    flywheelControl(selectedIndex)
+    blasterControl(selectedIndex)
     #runSearchBox()
 
     allCurBoxes, allProbs, networkEndTime = labelImage.findBoxes(modelBig, imageOrig, searchBox, constants.kDetectionThreshold)
 
     drawBoxes(allCurBoxes, imageOrig, (0,255,0), 8)
 
-    #Does non maxima suppression on all network detections
-    #print(allCurBoxes.shape)
-    #print(allCurBoxes)
-    #if inputSource != 0:
-    #    if frameNumber == 9:
-    #        pdb.set_trace()
-
     curBoxes = aryaNms.non_max_suppression(allCurBoxes, allProbs)
-    #print(curBoxes.shape)
 
     updateTracksAndDraw(trackList, imageOrig, curBoxes, loopStartTime)
 
     selectedIndex, _ = getSelectionAndPredict(trackList, imageOrig, orig_height, prevPrediction)
 
     #aimTurretAndDraw(960, 0)#TODO: remove. Only used for calibration.
-
 
     #If no target has been selected then select a new target based on the highest quality detection (whichever has been seen the most)
     if selectedIndex is None:
@@ -248,24 +253,21 @@ while(True):
 
 
         #fireTurret by pulsing the solenoid
-        if(loopStartTime - prevFireTime > 1/constants.kRateOfFire):
-            if ser is not None:
-                ser.write(("f" + "\n").encode())
-                temp = 1
-            prevFireTime = loopStartTime
 
-    #print('time:', networkEndTime - loopStartTime)
+    #print('time:', networkEndTime - loopStartTime) #Only used for testing. Prints network runtime.
     outLabeled.write(imageOrig)
     cv2.imshow('image', cv2.resize(imageOrig, (1280,720))) #Resizing so image fits on screen
 
     k = cv2.waitKey(1)
     if k == 0xFF & ord("q"):
         if ser is not None:
-            ser.write(("s" + "\n").encode())
+            wheelsOff()
+            stopFiring()
         break
     elif k == 0xFF & ord("p"):
         if ser is not None:
-            ser.write(("s" + "\n").encode())
+            wheelsOff()
+            stopFiring()
         pdb.set_trace()
 
 
@@ -281,7 +283,8 @@ pickleDir = '/Users/arygout/Documents/aaStuff/BenchmarkVideos/TrackerLabeled/'
 
 pickle.dump(dictionary, open('videoDump.pkl', 'wb'))
 if ser is not None:
-    ser.write(("s" + "\n").encode())
+    wheelsOff()
+    stopFiring()
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
@@ -305,8 +308,6 @@ def runSearchBox():
 
     if selectedIndex is not None: #When a track is currently selected...
 
-        #ser.write(("w" + "\n").encode())
-
         selectedBox = trackList[selectedIndex].meas['box']
 
         selectedBoxCenter = (int((selectedBox[0] + selectedBox[2])/2),int((selectedBox[1] + selectedBox[3])/2))
@@ -323,6 +324,3 @@ def runSearchBox():
             row = np.copy(curBoxes[i])
             rowShift = np.array([searchBox[0], searchBox[1], searchBox[0], searchBox[1]])
             curBoxes[i] += rowShift
-    else:
-        #ser.write(("s" + "\n").encode())
-        temp = 3

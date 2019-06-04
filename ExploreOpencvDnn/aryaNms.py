@@ -15,10 +15,10 @@ def non_max_suppression(boxes, probs=None, overlapThresh=0.3):
 	pick = []
 
 	# if probabilities are provided, sort on them instead
-	if probs is not None:
-		sort_val = probs
-	else:
-		sort_val = boxes[:, 4]
+	#if probs is not None:
+	#	sort_val = probs
+	#else:
+	sort_val = boxes[:, 3]
 	# sort the indexes
 	idxs = np.argsort(sort_val.ravel())
 	# keep looping while some indexes still remain in the indexes list
