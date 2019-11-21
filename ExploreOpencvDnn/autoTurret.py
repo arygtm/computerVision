@@ -1,5 +1,5 @@
 
-#Base code from: https://heartbeat.fritz.ai/real-time-object-detection-on-raspberry-pi-using-opencv-dnn-98827255fa60
+
 
 import cv2
 import time
@@ -324,3 +324,5 @@ def runSearchBox():
             row = np.copy(curBoxes[i])
             rowShift = np.array([searchBox[0], searchBox[1], searchBox[0], searchBox[1]])
             curBoxes[i] += rowShift
+            
+#Human classification code from: https://heartbeat.fritz.ai/real-time-object-detection-on-raspberry-pi-using-opencv-dnn-98827255fa60
